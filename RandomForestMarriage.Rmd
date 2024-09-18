@@ -1,0 +1,39 @@
+---
+title: "Random Forest"
+author: "Anthony Staines"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(randomForest)
+library(ranger)
+
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
+set.seed(412789)
+```
+
+# Training data
+
+Start with the Ames housing data. This is a supervised learning example dataset, where the goal is to predict the sales price. See De Cock, D. (2011). "Ames, Iowa: Alternative to the Boston Housing Data as an End of Semester Regression Project," Journal of Statistics Education, Volume 19, Number 3.
+Note that Sale_Price is directly observed, without error.
+
+```{r}
+AMES <- AmesHousing::make_ames()
+```
+
+We also use the Atttrition data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. 
+```{r}
+
+data("attrition", package = "modeldata")
+glimpse(attrition)
+Attrition <- attrition
+rm(attrition)
+
+```
