@@ -10,10 +10,12 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
+rm(list=ls())
 
 library(tidyverse)
 library(randomForest)
 library(ranger)
+library(rsample)
 
 knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
 set.seed(412789)
@@ -25,15 +27,78 @@ Start with the Ames housing data. This is a supervised learning example dataset,
 Note that Sale_Price is directly observed, without error.
 
 ```{r}
-AMES <- AmesHousing::make_ames()
+Ames <- AmesHousing::make_ames()
+
 ```
 
-We also use the Atttrition data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. 
-```{r}
+We also use the Attrition data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. Attrition is also observed without error.
 
+```{r}
 data("attrition", package = "modeldata")
-glimpse(attrition)
+class(attrition)
 Attrition <- attrition
 rm(attrition)
+
+```
+
+
+# One random forest
+
+```{r}
+# number of features
+n_features <- length(setdiff(names(Ames), "Sale_Price"))
+
+# train a default random forest model
+ames_rf1 <- ranger(
+  Sale_Price ~ ., 
+  data = Ames,
+  mtry = floor(n_features / 3),
+  importance = 'impurity',
+  respect.unordered.factors = "order",
+  seed = 123
+)
+
+# get OOB RMSE
+(default_rmse <- sqrt(ames_rf1$prediction.error))
+## [1] 24859.27
+
+treeInfo(ames_rf1)#  
+importance(ames_rf1)
+```
+
+
+# and another
+
+
+```{r}
+# number of features
+n_features <- length(setdiff(names(Attrition), "Attrition"))
+
+# train a default random forest model
+attr_rf1 <- ranger(
+  Attrition ~ ., 
+  data = Attrition,
+  mtry = floor(n_features / 3),
+  importance = 'impurity',
+  respect.unordered.factors = "order",
+  seed = 123
+)
+
+# get OOB RMSE
+(default_rmse <- sqrt(attr_rf1$prediction.error))
+## [1] 24859.27
+
+treeInfo(attr_rf1)#  
+importance(attr_rf1)
+
+```
+
+```{r}
+
+p1 <- vip::vip(attr_rf1, num_features = 25, bar = FALSE)
+p2 <- vip::vip(ames_rf1, num_features = 25, bar = FALSE)
+gridExtra::grid.arrange(p1, p2, nrow = 1)
+
+
 
 ```
