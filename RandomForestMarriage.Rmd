@@ -92,13 +92,12 @@ treeInfo(attr_rf1)#
 importance(attr_rf1)
 
 ```
+# Variable importance measure
 
 ```{r}
 
 p1 <- vip::vip(attr_rf1, num_features = 25, bar = FALSE)
 p2 <- vip::vip(ames_rf1, num_features = 25, bar = FALSE)
 gridExtra::grid.arrange(p1, p2, nrow = 1)
-
-
 
 ```
