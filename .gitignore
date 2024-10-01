@@ -36,3 +36,8 @@ rsconnect/
 RandomForestMarriage.Rproj
 *.html
 *.pdf
+RandomForestMarriage.docx
+RandomForestMarriage.log
+RandomForestMarriage.tex
+RandomForestMarriage_files
+Rplot.png
