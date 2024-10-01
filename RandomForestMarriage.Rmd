@@ -25,29 +25,27 @@ library(ggdendro)
 library(plotROC)
 
 knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
-set.seed(412789)
+set.seed(979)
 ```
 
 # Introduction - why examine Random Forest models in particular?
 
-There are numerous models used in machine learning, some complex beyond any explanation we can provide - for example the large language models at the foundation of many commercial AI projects, butsome simpler, and more open to explanation,
+There are numerous models used in machine learning, some complex beyond any explanation we can provide - for example the large language models at the foundation of many commercial AI projects, but some are simpler, and more open to explanation. To examine the behaviour, and some of the limitations in real use, of machine learning, these simpler models are preferable.
 
-To examine the behaviour, and some of the limitations in real use, of machine learning, these simpler models are preferable. In a real modelling context several different families of model might be chosen, developed and applied to a particular task. Random forest models, which are the focus of this paper, are popular because they are flexible, usually perform well, and are not too difficult to use.
+In a real modelling context several different families of model might be chosen, developed and applied to a particular task. Random forest models, which are the focus of this paper, are popular because they are flexible, usually perform well, and are not too difficult to use.
 
 To understand random forest models, it is first necessary to understand Classification and Regression Trees (CART), which are both a modelling approach in their own right, and the constituents of the forest. These are models designed to develop a classification, or a regression, based on training data.
 
-In this context a classification is a decision as to which one of a number of groups any particular item falls into. In the substantive example, the question is, based on data recorded before marriage, should a proposed marriage be further investigated as a potential sham marriage or not. There are two possible outcomes, yes and no. In other situations, there may be several possible outcomes, or it may be desired to predict a value for an outcome, where the outcome is a number, in which case the analysis is a form of regression.
+In this context a classification is a decision as to which one of a number of groups any particular item falls into. In the substantive example, the question is, based on data recorded before marriage, should a proposed marriage be further investigated as a potential sham marriage or not. There are two possible outcomes, yes and no. In other situations, there may be several possible outcomes, or it may be desired to predict a value for an outcome, where the outcome is a number, in which case the analysis is some form of regression.
 
 ## Data used
 
-The data used by the UK Home Office to develop their model are not available, and indeed, the majority of the variables included in the final model are not identified. For purpose of illustration, a commonly used, and publicly available data set is desirable, as a substitute.
+The data used by the UK Home Office to develop their model are not available, and indeed, the majority of the variables included in the final model are not identified. For purpose of illustration, a commonly used, and publicly available data set is desirable, as a substitute. We use, for demonstration purposes, the 'Attrition' data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. These data were collected to model employee leaving - hence the term attrition.
 
-We use, for demonstration purposes, the 'Attrition' data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. These data were collected to model employee leaving - hence the term attrition. 
-
-The original website link, (https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset/data), describes the data thus - 
+The original website link, which is accessible through the Kaggle machine learning website, (https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset/data), describes the data thus - 
 “Uncover the factors that lead to employee attrition and explore important questions such as ‘show me a breakdown of distance from home by job role and attrition’ or ‘compare average monthly income by education and attrition’. This is a fictional data set created by IBM data scientists.”
 
-Our first task is to briefly survey these data, and see what variables are present, and what set of values they take.
+What data are contained in this set?Our first task is to briefly survey these data, and see what variables are present, and what set of values they take.
 
 ```{r load attrition}
 data("attrition", package = "modeldata")
@@ -57,7 +55,14 @@ rm(attrition)
 ```
 
 ```{r skimr}
-skimr::skim(Attrition)
+table1::table1(~. | Attrition,
+               data = Attrition %>%
+                 mutate(Attrition =
+                          case_match(Attrition,
+                                     'Yes' ~ 'Left',
+                                     'No' ~ 'Stayed')),
+               overall = FALSE)
+
 ```
 
 We also look specifically at the outcome - Attrition from employment.
@@ -66,37 +71,47 @@ We also look specifically at the outcome - Attrition from employment.
 table(Attrition$Attrition)
 ```
 
-Most people stayed in work, but just under 1 in 5 left.
+Most people stayed in work, but just under 1 in 5 left. There are almost 1500 people in these data, and these can conveniently be divided into a training set, which is used to develop a model, and a test set, which is used to see how well the model performs on new data. In most applications of machine learning, the latter is the key question. We divide the data with 3 in 4 going to the training set, and 1 in 4 going to the test set, while ensuring that this selection is done within the two values of Attrition, so that there are the same proportion of leavers and non-leavers in both groups.
 
-```{r Recode Job role and StockOption}
+```{r Recode Job role}
+# First we recode two variables to more useful values, and add  a third variable.
 Attrition <- Attrition %>%
     mutate(JobRole = case_match(JobRole,
         c('Laboratory_Technician', 'Sales_Executive', 'Sales_Representative') ~ 'Sales/Tech',
         c('Healthcare_Representative', 'Human_Resources', 'Manager', 'Manufacturing_Director', 'Research_Director', 'Research_Scientist') ~ 'Research/Manager/Rep')) %>%
-    mutate(StockOptionLevel = case_match(StockOptionLevel,
-                                    0 ~ 'No',
-                                    1 ~ 'Yes')) %>%
     mutate(Income = case_when(
         MonthlyIncome >= 2475 ~ 0,
         MonthlyIncome < 2475 ~ 1))
 
+#Then we split
+Attrition_split <- initial_split(Attrition, prop = 3/4, strata = Attrition)
+TEST  <-  testing(Attrition_split)
+TRAIN <- training(Attrition_split)
 ```
 
-Given these data, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are quite a few tools for this, and we use the rpart package from R. This starts with every variable in the data set, and produces the results shown.
+Given these data, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are quite a few tools for this, and we use the `r rpart` package from R. This starts with every variable in the data set, and produces a tree, as shown.
 
-```{r rpart Short Tree}
-Tree <- rpart(Attrition ~., data=Attrition)
-Tree_0.03 <- rpart::prune(Tree, cp = 0.03)
-Tree_0.02 <- rpart::prune(Tree, cp = 0.02)
+```{r rpart Create three trees}
+Tree_0.01 <- rpart(Attrition ~., data = training(Attrition_split))
+Tree_0.02 <- rpart::prune(Tree_0.01, cp = 0.02)
+Tree_0.03 <- rpart::prune(Tree_0.01, cp = 0.03)
 ```
 
-```{r Plot of simpler tree 0.03}
+The first tree to emerge from this process is rather complicated, and perhaps too complicated to be of value. Such complex trees tend to overfit the data they are given, and perform markedly worse on new data than simpler trees.
+
+```{r Tree plot}
+rpart.plot::rpart.plot(Tree_0.01,
+ type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
+
+```
+It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to reduce it to 0.03, modest change, produces a very different picture.
+
+```{r Tree_0.03}
 rpart.plot::rpart.plot(Tree_0.03,
  type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
 
 ```
-
-This is a single CART (a tree), and it is not too bad at predicting attrition.It is read from top to bottom. 
+This is a single CART (a tree), and it is not too bad at predicting attrition. It is read from top to bottom. 
 
 * The first split, is at OverTime, and it seems that staff who are paid for overtime are more likely to move on (Attrition), than those who are not. Payment for over time reflects job grade.
 
@@ -104,57 +119,43 @@ This is a single CART (a tree), and it is not too bad at predicting attrition.It
 
 * The leaves, the bits at the end drawn as circles, are labelled with the most likely outcomes on that branch (Yes or No to leaving), the proportion leaving, and the percentage of the workforce on that branch.
 
-This is one tree.
+These splits can be chosen in a number of different ways in different CART packages. In this case, splits are chosen to maximise the uniformity of the groups after each split.
 
-Here is another one. This comes from a trivial adjustment of one parameter in the model, a parameter (a lever if you like), which allows the software to choose deeper and more complicated trees.
+Setting the complexity penalty to 0.02 we produce another tree. Although the two trees are similar, in that both start with the same two variables, paid overtime, and salary level, they are not the same.
 
-Although the two trees are similar, in that both start with the same two variables, paid overtime, and salary level, they are not the same.
-
-```{r Plot of more complex tree 0.02}
-rpart.plot::rpart.plot(Tree_0.02,
+```{r Plot of Tree_0.02}
+rpartPlot_0.02 <- rpart.plot::rpart.plot(Tree_0.02,
  type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
 
 ```
 
-The point here is that a very minor choice of parameter, can produce a very different tree. Which of these is correct is probably not the right question, as both are justifiable, but one may be more useful than the other for a particular purpose.
+The point is that a very minor change in one parameter, can produce a very different tree. Which of these is correct is probably not the right question, as both of the simpler trees are justifiable, but one may be more useful than the other for a particular purpose.
 
-Theses two trees have been pruned - this means that splits which are numerically less important have been removed. The full tree looks like this.
+There are several different ways to examine the performance of a classification model. Which one to use, depends on the goals of the modelling exercise.
 
-```{r Full tree graph}
-rpart.plot::rpart.plot(Tree,
- type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
+A popular choice is to use a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the value of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
 
-```
+These graphs show the meaning of the term 'Are under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
 
-```{r Prediction table}
-table(predict(Tree, type = "class"), Attrition$Attrition)
-table(predict(Tree_0.03, type = "class"), Attrition$Attrition)
-table(predict(Tree_0.02, type = "class"), Attrition$Attrition)
-
-```
-
-There are several different ways to examine the performance of a classification model. Which one to use, depends on the goals of the modelling exercise. A popular choice is to use a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the value of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
-
-This graph shows the origin of the concept. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
-
-```{r Performance of CART model}
-Tree_Prediction <- ROCR::prediction(
-    predict(Tree, type = "prob")[,2],
-    Attrition$Attrition)
+```{r Performance of CART model - TRAINIING}
+predict(Tree_0.01, training(Attrition_split), type = "prob")[,2]
+Tree_Prediction_0.01 <- ROCR::prediction(
+    predict(Tree_0.01, training(Attrition_split), type = "prob")[,2],
+    training(Attrition_split)$Attrition)
 Tree_Prediction_0.02 <- ROCR::prediction(
-    predict(Tree_0.02, type = "prob")[,2],
-    Attrition$Attrition)
+    predict(Tree_0.02, training(Attrition_split), type = "prob")[,2],
+    training(Attrition_split)$Attrition)
 Tree_Prediction_0.03 <- ROCR::prediction(
-    predict(Tree_0.03, type = "prob")[,2],
-    Attrition$Attrition)
+    predict(Tree_0.03, training(Attrition_split), type = "prob")[,2],
+    training(Attrition_split)$Attrition)
 
-    DATA <- Attrition %>%
+    DATA_train <- training(Attrition_split) %>%
         select(Attrition) %>%
         mutate(Attrition = case_match(Attrition,
                                       'Yes' ~ 1,
                                       'No' ~ 0)) %>%
         bind_cols(Prediction =
-            unlist(Tree_Prediction@predictions,
+            unlist(Tree_Prediction_0.01@predictions,
                 use.names = FALSE)) %>%
         bind_cols(Prediction_0.02 =
             unlist(Tree_Prediction_0.02@predictions,
@@ -164,84 +165,222 @@ Tree_Prediction_0.03 <- ROCR::prediction(
                 use.names = FALSE))
 ```
 
-```{r Prepare graphics}
-gTree <- ggplot(DATA,aes(d = Attrition,
+```{r Performance of CART model - TEST}
+predict(Tree_0.01, testing(Attrition_split), type = "prob")[,2]
+Tree_Prediction_0.01 <- ROCR::prediction(
+    predict(Tree_0.01, testing(Attrition_split), type = "prob")[,2],
+    testing(Attrition_split)$Attrition)
+Tree_Prediction_0.02 <- ROCR::prediction(
+    predict(Tree_0.02, testing(Attrition_split), type = "prob")[,2],
+    testing(Attrition_split)$Attrition)
+Tree_Prediction_0.03 <- ROCR::prediction(
+    predict(Tree_0.03, testing(Attrition_split), type = "prob")[,2],
+    testing(Attrition_split)$Attrition)
+
+    DATA_test <- testing(Attrition_split) %>%
+        select(Attrition) %>%
+        mutate(Attrition = case_match(Attrition,
+                                      'Yes' ~ 1,
+                                      'No' ~ 0)) %>%
+        bind_cols(Prediction =
+            unlist(Tree_Prediction_0.01@predictions,
+                use.names = FALSE)) %>%
+        bind_cols(Prediction_0.02 =
+            unlist(Tree_Prediction_0.02@predictions,
+                use.names = FALSE)) %>%
+        bind_cols(Prediction_0.03 =
+            unlist(Tree_Prediction_0.03@predictions,
+                use.names = FALSE))
+```
+
+```{r Prepare graphics - TRAIN}
+gTree_0.01_train <- ggplot(DATA_train, aes(d = Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
     geom_abline(color='red', slope = 1, intercept = 0) 
 
-gTree_0.02 <- ggplot(DATA,aes(d = Attrition,
+gTree_0.02_train <- ggplot(DATA_train, aes(d = Attrition,
                          m = Prediction_0.02))  +
     geom_roc(colour = 'blue', labelsize = 3) +
     geom_abline(color='red', slope = 1, intercept = 0)
 
-gTree_0.03 <- ggplot(DATA,aes(d = Attrition,
+gTree_0.03_train <- ggplot(DATA_train, aes(d = Attrition,
                          m = Prediction_0.03)) +
     geom_roc(colour = 'blue', labelsize = 3) +
     geom_abline(color='red', slope = 1, intercept = 0)
 
-AUC <- calc_auc(gTree)
-AUC_0.02 <- calc_auc(gTree_0.02)
-AUC_0.03 <- calc_auc(gTree_0.03)
+AUC_0.01_train <- calc_auc(gTree_0.01_train)
+AUC_0.02_train <- calc_auc(gTree_0.02_train)
+AUC_0.03_train <- calc_auc(gTree_0.03_train)
+```
+
+```{r Prepare graphics - TRAIN}
+gTree_0.01_test <- ggplot(DATA_test, aes(d = Attrition,
+                         m = Prediction)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+    geom_abline(color='red', slope = 1, intercept = 0) 
+
+gTree_0.02_test <- ggplot(DATA_test, aes(d = Attrition,
+                         m = Prediction_0.02))  +
+    geom_roc(colour = 'blue', labelsize = 3) +
+    geom_abline(color='red', slope = 1, intercept = 0)
+
+gTree_0.03_test <- ggplot(DATA_test, aes(d = Attrition,
+                         m = Prediction_0.03)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+    geom_abline(color='red', slope = 1, intercept = 0)
+
+AUC_0.01_test <- calc_auc(gTree_0.01_test)
+AUC_0.02_test <- calc_auc(gTree_0.02_test)
+AUC_0.03_test <- calc_auc(gTree_0.03_test)
 ```
 
 
 ```{r Draw graphs}
-gTree +
-    labs(title = 'Full tree',
-         subtitle = paste('Area under curve = ', round(AUC$AUC, 2)),
+gTree_0.01_train <- gTree_0.01_train +
+    labs(title = 'Full tree - Training data',
+         subtitle = paste('Area under curve = ', round(AUC_0.01_train$AUC, 2)),
          x = "False positives",
          y = "True positives",
     )
 
-gTree_0.02 +
-    labs(title = 'Pruned tree 1',
-         subtitle = paste('Area under curve = ', round(AUC_0.02$AUC, 2)),
+gTree_0.02_train <- gTree_0.02_train +
+    labs(title = 'Pruned tree 1  - Training data',
+         subtitle = paste('Area under curve = ', round(AUC_0.02_train$AUC, 2)),
          x = "False positives",
          y = "True positives",
     )
 
-gTree_0.03 +
-    labs(title = 'Pruned tree 2',
-         subtitle = paste('Area under curve = ', round(AUC_0.03$AUC, 2)),
+gTree_0.03_train <- gTree_0.03_train +
+    labs(title = 'Pruned tree 2 - Training data',
+         subtitle = paste('Area under curve = ', round(AUC_0.03_train$AUC, 2)),
          x = "False positives",
          y = "True positives",
     )
+
+
+gTree_0.01_test <- gTree_0.01_test +
+    labs(title = 'Full tree - Test data',
+         subtitle = paste('Area under curve = ', round(AUC_0.01_test$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+
+gTree_0.02_test <- gTree_0.02_test +
+    labs(title = 'Pruned tree 1  - Test data',
+         subtitle = paste('Area under curve = ', round(AUC_0.02_test$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+
+gTree_0.03_test <- gTree_0.03_test +
+    labs(title = 'Pruned tree 2 - Test data',
+         subtitle = paste('Area under curve = ', round(AUC_0.03_test$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+
+cowplot::plot_grid(gTree_0.01_train, gTree_0.01_test, gTree_0.02_train,
+                   gTree_0.02_test, gTree_0.03_train, gTree_0.03_test,
+                   ncol = 2, labels=c())
 ```
 
+While the full model does much better on the training data than the simpler models, on test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas would distract from the focus on the Home Office model. 
 
 # From a tree to a forest
 
-While CART is a useful technique, it has some significant weaknesses. In particular it is very dependent on the exact data fed to it, and often works very poorly on new data. Given that the purpose of the Home Office work is to identify future marriages that are felt to be at high risk of being sham marriages, this is not desirable.
+While CART is a useful technique, it has some significant weaknesses. In particular it is very dependent on the exact data fed to it, and often works very poorly on new data. Given that the purpose of the Home Office work is to identify future marriages that are felt to be at high risk of being sham marriages, this is not desirable. for this reason, it is common to use an extension of CART, known as random forests.
 
-The key idea behind random forests is to look across many possible classification trees, rather than looking for a single optimum tree. These trees are designed to be different, and to cover a very wide range of possible variables. The final classification is made across all of these trees. A more detailed non-technical introduction is here, and the original work is from Leo Breiman.
+The key idea behind random forests is to look across many possible classification trees, rather than looking for a single optimum tree. These trees are designed to be different, and to cover a very wide range of possible variables. Each tree is fitted to a random subset of the available variables in the model. The final classification is made across all of these trees. A more detailed non-technical introduction is here, and the original work is from Leo Breiman (2001).
 
 How this works bears further consideration. Models are developed on a set of data, in our example case, fictitious data based on people leaving IBM, and in our substantive case, data collected from UK marriage registrars, at some time before a proposed marriage.
-
-
-
-In our example, we start by dividing the data into two sets, half a training dataset, and half a test dataset.
 
 ```{r}
 # number of features
 n_features <- length(setdiff(names(Attrition), "Attrition"))
 
-# train a default random forest model
+# train a default random forest model on the Training data
 attr_rf1 <- ranger(
   Attrition ~ ., 
-  data = Attrition,
+  data = training(Attrition_split),
+  num.trees = 1000,
   mtry = floor(n_features / 3),
+  probability=TRUE,
   importance = 'impurity',
   respect.unordered.factors = "order",
-  seed = 123
+  min.bucket = 10
 )
 
+print(attr_rf1)
 # get OOB RMSE
-(default_rmse <- sqrt(attr_rf1$prediction.error))
-## [1] 24859.27
+default_rmse <- sqrt(attr_rf1$prediction.error)
+## [1] 0.33
 
-treeInfo(attr_rf1)#  
+treeInfo(attr_rf1)
 importance(attr_rf1)
+
+predict_ranger_train <- predict(attr_rf1, training(Attrition_split))
+predict_ranger_test <- predict(attr_rf1, testing(Attrition_split))
+predict_ranger <- predict(attr_rf1, Attrition)
+
+
+predictions_train <- predictions(predict_ranger_train)
+predictions_test <- predictions(predict_ranger_test)
+
+RF_data_train = bind_cols(Attrition = as.numeric(training(Attrition_split)$Attrition) - 1,
+                    Prediction = predictions_train[,2])
+
+RF_data_test = bind_cols(Attrition = as.numeric(testing(Attrition_split)$Attrition) - 1,
+                    Prediction = predictions_test[,2])
+
+gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
+                         m = Prediction)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+  geom_abline(color='red', slope = 1, intercept = 0)
+
+
+gTree_ranger_test <- ggplot(RF_data_test, aes(d = Attrition,
+                         m = Prediction)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+  geom_abline(color='red', slope = 1, intercept = 0)
+
+AUC_ranger_train <- calc_auc(gTree_ranger_train)
+AUC_ranger_test <- calc_auc(gTree_ranger_test)
+
+
+gTree_ranger_train <- gTree_ranger_train +
+    labs(title = 'Random forest - training data',
+         subtitle = paste('Area under curve = ', round(AUC_ranger_train$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+gTree_ranger_train
+
+gTree_ranger_test <- gTree_ranger_test +
+    labs(title = 'Random forest - Test data',
+         subtitle = paste('Area under curve = ', round(AUC_ranger_test$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+gTree_ranger_test
+```
+
+```{r Graph RF}
+RF_data_test %>%
+  mutate(Attrition = as_factor(Attrition)) %>%
+  mutate(Prediction = as_factor(
+    case_when(Prediction < 0.15 ~ '0',
+              Prediction >= 0.15 ~ '1'))) %>%
+  conf_mat(truth=Attrition, estimate = Prediction) %>%
+  summary()
+
+RF_data_train %>%
+  mutate(Attrition = as_factor(Attrition)) %>%
+  mutate(Prediction = as_factor(
+    case_when(Prediction < 0.15 ~ '0',
+              Prediction >= 0.15 ~ '1'))) %>%
+  conf_mat(truth=Attrition, estimate = Prediction) %>%
+  summary()
 
 
 ```
@@ -252,5 +391,30 @@ importance(attr_rf1)
 
 p1 <- vip::vip(attr_rf1, num_features = 25, bar = FALSE)
 p1
-vip::vip(gTree)
+#vip::vip(gTree)
+```
+
+```{r randomForest}
+randomForest( Attrition ~ .,
+              data = training(Attrition_split))
+
+```
+
+
+```{r}
+## Prediction
+train.idx <- sample(nrow(iris), 2/3 * nrow(iris))
+iris.train <- iris[train.idx, ]
+iris.test <- iris[-train.idx, ]
+rg.iris <- ranger(Species ~ ., data = iris.train, importance='impurity')
+pred.iris <- predict(rg.iris, data = iris.train)
+table(iris.train$Species, pred.iris$predictions)
+
+rg.iris$variable.importance
+
+iris.rf <- randomForest(Species ~ ., data=iris, importance=TRUE,
+                        proximity=TRUE)
+print(iris.rf)
+## Look at variable importance:
+round(importance(iris.rf), 2)
 ```
