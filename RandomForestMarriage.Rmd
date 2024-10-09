@@ -112,13 +112,29 @@ Tree_0.03 <- rpart::prune(Tree_0.01, cp = 0.03)
 
 The first tree to emerge from this process is rather complicated, and perhaps too complicated to be of value. Such complex trees tend to overfit the data they are given, and perform markedly worse on new data than simpler trees.
 
+
 ```{r Tree_0.01 plot}
 rpart.plot::rpart.plot(Tree_0.01,
  type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE, cex=0.8)
 
 ```
 
-It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to reduce it to 0.03, a modest change, produces a very different picture.
+It is possible to derive measure of the relative impact on the classification of the variables included in a tree, and this is referred to as 'variable importance'. For this tree the variable importance is shown in the table.
+
+```{r complex tree importance plot}
+
+ggplot(data = vip::vi(Tree_0.01) %>% arrange(Importance) %>% filter(Importance > 5),
+       aes(y = forcats::fct_inorder(Variable), x = Importance)) +
+  labs(title = 'Variable importance From a Classification Tree',
+       subtitle = 'Importance over 5',
+         x  = 'Variable importance (model based measure)',
+         y = 'Variable') +
+  geom_col(colour = 'black', fill = 'lightblue') +
+  theme_minimal() +
+  theme(text = element_text(size = 25))
+```
+
+It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to reduce it to 0.03, a modest change, produces a very different, and perhaps more comprehensible, picture.
 
 ```{r Tree_0.03}
 rpart.plot::rpart.plot(Tree_0.03,
@@ -378,6 +394,28 @@ gTree_ranger_test <- gTree_ranger_test +
     )
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
+
+In much the same way as for a single classification tree, the importance of the variables in a random forest can be calculated.
+
+```{r Importance plot for a ranger}
+
+Variable <- names(importance(attr_rf))
+Importance <- as.numeric(importance(attr_rf))
+DATA = bind_cols(Variable = Variable, Importance = Importance)
+
+ggplot(data = DATA %>% arrange(Importance) %>% filter(Importance > 5),
+       aes(y = forcats::fct_inorder(Variable), x = Importance)) +
+  labs(title = 'Variable importance from a Random Forest',
+       subtitle = 'Importance over 5',
+         x  = 'Variable importance (model based measure)',
+         y = 'Variable') +
+  geom_col(colour = 'black', fill = 'lightblue') +
+  theme_minimal() +
+  theme(text = element_text(size = 25))
+
+```
+
+Note that the relative impact of the variables is rather different form the case of the single tree fitted above. In particular all the salary related variables are more important, and paid overtime is much less important, in the random forest model, than in the classification tree.
 
 ## Performance on Training and Test data
 
