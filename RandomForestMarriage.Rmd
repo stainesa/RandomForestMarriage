@@ -23,6 +23,10 @@ library(ggplot2)
 library(dendextend)
 library(ggdendro)
 library(plotROC)
+library(knitr)
+#library(kable)
+library(kableExtra)
+library(vip)
 
 
 knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
@@ -36,15 +40,15 @@ set.seed(979)
 
 There are numerous models used in machine learning, some complex beyond any explanation we can provide - for example the large language models at the foundation of many commercial AI projects, but some are simpler, and more open to explanation. To examine the behaviour, and some of the limitations in real use, of machine learning, these simpler models are preferable.
 
-In a real modelling context several different families of model might be chosen, developed and applied to a particular task. Random forest models, which are the focus of this paper, are popular because they are flexible, usually perform well, and are not too difficult to use.
+In a real modelling context several different families of model might be chosen, developed and applied to a particular task. There is an extensive literature on how to do this. For the purposes of this work one single model family is chosen and simple models fitted, to illustrate some of the strengths and weaknesses of these approaches.
 
-To understand random forest models, it is first necessary to understand Classification and Regression Trees (CART), which are both a modelling approach in their own right, and the constituents of the forest. These are models designed to develop a classification, or a regression, based on training data.
+Random forest models, which are the focus of this paper, are popular because they are flexible, usually perform well, and are not too difficult to use. To understand random forest models, it is first necessary to understand Classification and Regression Trees (CART), which are both a modelling approach in their own right, and the constituents of the forest. These are models designed to develop a classification, or a regression, based on training data.
 
-In this context a classification is a decision as to which one of a number of groups any particular item falls into. In the substantive example, the question is, based on data recorded before marriage, should a proposed marriage be further investigated as a potential sham marriage or not. There are two possible outcomes, yes and no. In other situations, there may be several possible outcomes, or it may be desired to predict a value for an outcome, where the outcome is a number, in which case the analysis is some form of regression.
+In this context a classification is a decision as to which one of a number of groups any particular item falls into. In the substantive example, the question is, based on data recorded before marriage, should a proposed marriage be further investigated as a potential sham marriage or not. There are two possible outcomes, 'yes' and 'no'. In other situations, there may be several possible outcomes, or it may be desired to predict a value for an outcome, where the outcome is a number, in which case the analysis is some form of regression.
 
 ## Data used
 
-The data used by the UK Home Office to develop their model are not available, and indeed, the majority of the variables included in the final model are not identified. For purpose of illustration, a commonly used, and publicly available data set is desirable, as a substitute. We use, for demonstration purposes, the 'Attrition' data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. These data were collected to model employee leaving - hence the term attrition.
+The data used by the UK Home Office to develop their model are not available, and indeed, the majority of the variables included in the final model are not identified. For purpose of illustration, a commonly used, and publicly available data set is desirable, as a substitute. We use, for demonstration purposes only, the 'Attrition' data set, which is employee attrition information originally provided by the IBM Watson Analytics Lab. These data were collected to model employee leaving - hence the term 'attrition'.
 
 The original website link, which is accessible through the Kaggle machine learning website, (https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset/data), describes the data thus - 
 “Uncover the factors that lead to employee attrition and explore important questions such as ‘show me a breakdown of distance from home by job role and attrition’ or ‘compare average monthly income by education and attrition’. This is a *fictional* data set created by IBM data scientists.”
@@ -58,8 +62,8 @@ Attrition <- attrition
 rm(attrition)
 ```
 
-```{r Table1}
-table1::table1(~. | Attrition,
+```{r Table1, results='asis', tab.cap = 'Description of variables in the data set, for those who left, and stayed in IBM'}
+TABLE1 <- table1::table1(~. | Attrition,
                data = Attrition %>%
                  mutate(Attrition =
                           case_match(Attrition,
@@ -67,32 +71,35 @@ table1::table1(~. | Attrition,
                                      'No' ~ 'Stayed')),
                overall = FALSE)
 
+kbl(TABLE1, longtable = T, booktabs = T, caption = "Longtable") %>%
+  kable_styling(latex_options = c("repeat_header"))
+
 ```
 
 We also look specifically at the outcome - Attrition from employment.
- 
+
 ```{r Attrition table}
 table(Attrition$Attrition)
 ```
 
 Most people stayed in work, but just under 1 in 5 left. Note that this represents the actual attrition - these are staff who left employment. Were Attrition to be interpreted as being a measure of the risk for leaving, model interpretation would become more challenging, and this will be discussed further below.
 
-There are almost 1500 people in these data, and these can conveniently be divided into a training set, which is used to develop a model, and a test set, which is used to see how well the model performs on new data. In most applications of machine learning, the latter is the key question. We divide the data with 3 in 4 going to the training set, and 1 in 4 going to the test set, while ensuring that this selection is done within the two values of Attrition, so that there are the same proportion of leavers and non-leavers in both groups.
+There are almost 1,500 people in these data, and these can conveniently be divided into a training set, which is used to develop a model, and a test set, which is used to see how well the model performs on new data. In most applications of machine learning, the latter is the key question. We divide the data with 3 in 4 going to the training set, and 1 in 4 going to the test set, while ensuring that this selection is done within the two values of Attrition, so that there are the same proportion of leavers and non-leavers in both groups.
 
 ```{r Recode}
 # First we recode some variables to more useful values, and add  a third variable.
 Attrition <- Attrition %>%
     mutate(JobRole = case_match(JobRole,
-        c('Laboratory_Technician', 'Sales_Executive', 'Sales_Representative') ~ 'Sales/Tech',
-        c('Healthcare_Representative', 'Human_Resources', 'Manager', 'Manufacturing_Director', 'Research_Director', 'Research_Scientist') ~ 'Research/Manager/Rep')) %>%
-  mutate(EducationField = case_match(EducationField,
-                               c('Human_Resources','Marketing', 'Other') ~ 'Non-technical',
-                               c('Life_Sciences','Medical','Technical_Degree') ~ 'Technical')) %>%
-  mutate(BusinessTravel = case_match(BusinessTravel,
-                                     c('Non-Travel') ~ 'None',
-                                     c('Travel_Rarely') ~ 'Seldom',
+                                c('Laboratory_Technician', 'Sales_Executive', 'Sales_Representative') ~ 'Sales/Tech',
+                                c('Healthcare_Representative', 'Human_Resources', 'Manager', 'Manufacturing_Director', 'Research_Director', 'Research_Scientist') ~ 'Research/Manager/Rep')) %>%
+    mutate(EducationField = case_match(EducationField,
+                                       c('Human_Resources','Marketing', 'Other') ~ 'Non-technical',
+                                       c('Life_Sciences','Medical','Technical_Degree') ~ 'Technical')) %>%
+    mutate(BusinessTravel = case_match(BusinessTravel,
+                                       c('Non-Travel') ~ 'None',
+                                       c('Travel_Rarely') ~ 'Seldom',
                                        c('Travel_Frequently') ~ 'Often')) 
-  
+
 ```
 
 ```{r split into test and training data}
@@ -115,7 +122,7 @@ The first tree to emerge from this process is rather complicated, and perhaps to
 
 ```{r Tree_0.01 plot}
 rpart.plot::rpart.plot(Tree_0.01,
- type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE, cex=0.8)
+                       type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE, cex=0.8)
 
 ```
 
@@ -125,16 +132,16 @@ It is possible to derive measure of the relative impact on the classification of
 
 ggplot(data = vip::vi(Tree_0.01) %>% arrange(Importance) %>% filter(Importance > 5),
        aes(y = forcats::fct_inorder(Variable), x = Importance)) +
-  labs(title = 'Variable importance From a Classification Tree',
-       subtitle = 'Importance over 5',
+    labs(title = 'Variable importance From a Classification Tree',
+         subtitle = 'Importance over 5',
          x  = 'Variable importance (model based measure)',
          y = 'Variable') +
-  geom_col(colour = 'black', fill = 'lightblue') +
-  theme_minimal() +
-  theme(text = element_text(size = 25))
+    geom_col(colour = 'black', fill = 'lightblue') +
+    theme_minimal() +
+    theme(text = element_text(size = 25))
 ```
 
-It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to reduce it to 0.03, a modest change, produces a very different, and perhaps more comprehensible, picture.
+It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to increase it to 0.03, a modest change, produces a very different, and perhaps more comprehensible, picture. This is referred to as 'pruning'.
 
 ```{r Tree_0.03}
 rpart.plot::rpart.plot(Tree_0.03,
@@ -148,11 +155,11 @@ This is a single CART (a tree), and it performs reasonably for predicting attrit
 
 * The second split here is amongst those paid for overtime work, into those with higher and lower salaries, where those with lower salaries are more mobile than those with higher salaries.The cut off at $2475 is about the 15th centile of monthly income.
 
-* The leaves, the bits at the end drawn as circles, are labelled with the most likely outcomes on that branch (Yes or No to leaving), the proportion leaving, and the percentage of the workforce on that branch.
+* The leaves, the pieces at the end drawn as circles, are labelled with the most likely outcomes on that branch (Yes or No to leaving), the proportion leaving, and the percentage of the workforce on that branch.
 
 These splits can be chosen in a number of different ways in different CART packages. In this case, using the rpart package, splits are chosen to maximise the uniformity of the groups after each split.
 
-Setting the complexity penalty to 0.02 we produce another tree. Although the two trees are similar, in that both start with the same two variables, paid overtime, and salary level, they are not the same.
+Setting the complexity penalty to 0.02 we produce another tree. Although the two pruned trees are similar, in that both start with the same two variables, paid overtime, and salary level, they are not the same.
 
 ```{r Plot of Tree_0.02}
 rpartPlot_0.02 <- rpart.plot::rpart.plot(Tree_0.02,
@@ -164,11 +171,11 @@ The point is that a very minor change in one parameter, can produce a very diffe
 
 There are several different ways to examine the performance of a classification model. Which one to use, depends on the goals of the modelling exercise.
 
-A popular choice is to use a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the value of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
+A popular choice is to use a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
 
-These graphs show the meaning of the term 'Area under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
+These graphs, which are known as Receiver Operating Characteristics (ROC) curves (Peterson et al. 1954), show the meaning of the term 'Area under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
 
-```{r Performance of CART model - TRAINIING}
+```{r Performance of CART model - TRAINING}
 Tree_Prediction_0.01 <- ROCR::prediction(
     predict(Tree_0.01, training(Attrition_split), type = "prob")[,2],
     training(Attrition_split)$Attrition)
@@ -313,7 +320,7 @@ cowplot::plot_grid(gTree_0.01_train, gTree_0.01_test, gTree_0.02_train,
                    ncol = 2, labels=c())
 ```
 
-While the full model does much better on the training data than the simpler models, on test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas would distract from the focus on the Home Office model. 
+While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas further would distract from the focus on the social implication of the use of the Home Office model. 
 
 # From a tree to a forest
 
@@ -482,15 +489,15 @@ ggplot(data = Performance,
 
 # Impacts of random error and bias
 
-The data in our example, whether or not someone left the company, can be taken to be very reliable. To match more closely with our substantive example, the Home Office sham marriage analysis tool, consider using these models to predict the risk of leaving. The impact of this, in practice, is hard to know, as a manager might conceivably either give more attention to an employee perceived to be at risk of leaving, or might exclude that person from opportunities for development, depending on their views of the appropriate response. By contrast, there may be little benefit to a couple form being investigated as a potential sham marriage, and referred for further investigation, unless evidence of coercion is identified.
+The data in our example, whether or not someone left the company, can be taken to be very reliable. To match more closely with our substantive example, the Home Office sham marriage analysis tool, consider using these models to predict the risk of leaving. The impact of this, in practice, is hard to know, as a manager might conceivably either give more attention to an employee perceived to be at risk of leaving, or might exclude that person from opportunities for development, depending on their views of the appropriate response. By contrast, there may be little benefit to a couple from being investigated as a potential sham marriage, and referred for further investigation, unless evidence of coercion is identified.
 
-Two possible effects might be seen given this situation. The assessed risk of leaving might be quite inaccurate, or it might be biassed, perhaps because of the prior belief of a manager that certain categories of employee are more likely to leave than others. In the sham marriage context, this would be seen as referral for investigation based on either errors by the registrars in deciding which cases to refer, or prejudice by the registrars in referring certain cases more than others. In the first situation, too many couples would be referred but this excess would be fairly distributed across all couples presenting; in the second situation, certain couples would be at higher (or lower) risk of referral, because the registrars had a prior belief that certain irrelevant characteristics were more likely to be associated with sham marriage.
+Two possible effects might be seen given this situation. The assessed risk of leaving might be quite inaccurate, or it might be biassed, perhaps because of the prior belief of a manager that certain categories of employee are more likely to leave than others. In the sham marriage context, this would be seen as referral for investigation based on either errors by the registrars in deciding which cases to refer, or prejudice by the registrars in referring certain cases more than others. In the first situation, either too many or too few, couples would be referred but this excess would be fairly distributed across all couples presenting; in the second situation, certain couples would be at higher (or lower) risk of referral, because the registrars had a prior belief that certain irrelevant characteristics were more likely to be associated with sham marriage.
 
 To explore these effects further, a set of simulation studies are required. The first set examines the effect of adding various degrees of random error to the data, and the second examines the effect of bias. Of course, in this contrived situation, we know the true values - the values of Attrition from the original dataset, so there is a gold standard available for comparison.
 
 ## Random error
 
-For the first analysis the aim is to illustrate the impact of random error in the training data on the performance of a random forest (RF) classifier. For this work, the true values of leaving (or staying) are changed randomly. The question is what happens to the classifier performance, measured as the are under the receiver operating characteristic curve, as this error rate rises. There are three case, first how the classifier performs on the randomly altered data, second how it performs on the original training data, and third how it performs on the original test data.
+For the first analysis the aim is to illustrate the impact of random error in the training data on the performance of a random forest (RF) classifier. For this, the true values of leaving (or staying) are changed randomly. The question is what happens to the classifier performance, measured as the area under the ROC curve, as this error rate rises. There are three case, first how the classifier performs on the randomly altered data, second how it performs on the original training data, and third how it performs on the original test data.
 
 ```{r swap_binary function}
 ################################################
@@ -774,7 +781,7 @@ D <- D %>%
                names_to = 'Index',
                values_to = 'AUC') %>%
   mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
-  arrange(Type, Error_rate, Index)
+arrange(Type, Error_rate, Index)
 ```
 
 ```{r Graph the random error simulations}
@@ -782,21 +789,21 @@ D <- D %>%
 ggplot(data <- D,
        aes(x = AUC, y = Error_pct, group = interaction(Type,Error_rate),
            colour = Type, fill = Type)) +
-  geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
-  labs(title = 'Impact of increasing level of error on training and test datasets',
-       x = "Area under Curve",
-       y = "Simulated error rate in training data") +
-  theme_minimal() +
-  coord_cartesian(xlim = c(0.7,1)) +
-  scale_y_discrete(limits = rev)
+    geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
+    labs(title = 'Impact of increasing level of error on training and test datasets',
+         x = "Area under Curve",
+         y = "Simulated error rate in training data") +
+    theme_minimal() +
+    coord_cartesian(xlim = c(0.7,1)) +
+    scale_y_discrete(limits = rev)
 
 ```
 
 In this graph each boxplot represents one set of 1,000 runs of an RF classifier. These are run with data for the training data set with various levels of random error added, ranging from none to 15%.
 
-The AUC is calculated for each RF for each of three sets of data - data with added random error (Noisy), which was used to fit the RF's; the original training data, which for these analyses represents the 'true' values of the training data; and the the original test data.
+The AUC is calculated for each RF for each of three sets of data - data with added random error (Noisy), which was used to fit the RF's; the original training data, which for these analyses represents the 'true' values of the training data; and the original test data.
 
-What this shows is that for even modest error rates, the estimated performance on noisy data is a gross over-estimate of the performance on clean test data; and the the performance of the classifier on noisy data is much worse, and both deteriorates, and becomes much more variable (represented by the length of the booxplot)  sharply as the level of noise increases.
+What this shows is that for even modest error rates, the estimated performance on noisy data is a gross over-estimate of the performance on clean test data; and the performance of the classifier on noisy data is much worse, and both deteriorates, and becomes much more variable (represented by the length of the booxplot)  sharply as the level of noise increases.
 
 # Bias
 
@@ -818,24 +825,25 @@ importance(attr_rf)
 
 ```{r eval=FALSE}
 gNoisy <- ggplot(data=D %>% filter(Type == 'Noisy'),
-       aes(x=AUC, group = Error_rate, colour=Error_rate )) +
-  geom_density() +
-  facet_wrap(~Error_rate, scales = 'free_y')
+                 aes(x=AUC, group = Error_rate, colour=Error_rate )) +
+    geom_density() +
+    facet_wrap(~Error_rate, scales = 'free_y')
 
 
 gTruth <- ggplot(data=D %>% filter(Type == 'Truth'),
-       aes(x=AUC, group = Error_rate, colour=Error_rate )) +
-  labs(title = 'Training data - original') +
-  geom_density() +
-  facet_wrap(~Error_rate, scales = 'free_y')
+                 aes(x=AUC, group = Error_rate, colour=Error_rate )) +
+    labs(title = 'Training data - original') +
+    geom_density() +
+    facet_wrap(~Error_rate, scales = 'free_y')
 
 
 gTest <- ggplot(data=D %>% filter(Type == 'Test'),
-       aes(x=AUC, group = Error_rate, colour=Error_rate )) +
-  geom_density() +
-  labs(title = 'Test data') +
-  facet_wrap(~Error_rate, scales = 'free_y')
+                aes(x=AUC, group = Error_rate, colour=Error_rate )) +
+    geom_density() +
+    labs(title = 'Test data') +
+    facet_wrap(~Error_rate, scales = 'free_y')
 
 cowplot::plot_grid(gNoisy, gTruth, gTest, nrow = 3)
 
 ```
+
