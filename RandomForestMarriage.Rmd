@@ -103,10 +103,24 @@ Attrition <- Attrition %>%
 ```
 
 ```{r split into test and training data}
+
 #Then we split
 Attrition_split <- initial_split(Attrition, prop = 3/4, strata = Attrition)
-TEST  <-  testing(Attrition_split)
-TRAIN <- training(Attrition_split)
+
+# Add a training variable to Attrition
+
+Attrition <- Attrition %>%
+  mutate(Training = FALSE)
+
+# Add a variable to indicate training set or test set.
+ Attrition$Training[Attrition_split$in_id] <- TRUE
+    table(Attrition$Attrition,Attrition$Training)
+    
+    
+  TEST <- Attrition %>% filter(!Training) %>% select(-Training)
+#  TEST  <-  testing(Attrition_split)
+  TRAIN <- Attrition %>% filter(Training) %>% select(-Training)
+#  TRAIN <- training(Attrition_split)
 ```
 
 Given these data, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are quite a few tools for this, and we use the rpart package from R. This starts with every variable in the data set, and produces a tree, as shown.
@@ -118,7 +132,6 @@ Tree_0.03 <- rpart::prune(Tree_0.01, cp = 0.03)
 ```
 
 The first tree to emerge from this process is rather complicated, and perhaps too complicated to be of value. Such complex trees tend to overfit the data they are given, and perform markedly worse on new data than simpler trees.
-
 
 ```{r Tree_0.01 plot}
 rpart.plot::rpart.plot(Tree_0.01,
@@ -169,63 +182,65 @@ rpartPlot_0.02 <- rpart.plot::rpart.plot(Tree_0.02,
 
 The point is that a very minor change in one parameter, can produce a very different tree. Which of these is correct is probably not the right question, as both of the simpler trees are justifiable, but one may be more useful than the other for a particular purpose.
 
-There are several different ways to examine the performance of a classification model. Which one to use, depends on the goals of the modelling exercise.
+## Performace of CAR Tree models
 
-A popular choice is to use a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
+There are several different ways to examine the performance of a classification model. Which one to use, depends mainly on the goals of the modelling exercise, and specifically on the costs of misclassification. One popular choice is a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss, that is a random classification, for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
 
 These graphs, which are known as Receiver Operating Characteristics (ROC) curves (Peterson et al. 1954), show the meaning of the term 'Area under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
 
 ```{r Performance of CART model - TRAINING}
-Tree_Prediction_0.01 <- ROCR::prediction(
-    predict(Tree_0.01, training(Attrition_split), type = "prob")[,2],
-    training(Attrition_split)$Attrition)
-Tree_Prediction_0.02 <- ROCR::prediction(
-    predict(Tree_0.02, training(Attrition_split), type = "prob")[,2],
-    training(Attrition_split)$Attrition)
-Tree_Prediction_0.03 <- ROCR::prediction(
-    predict(Tree_0.03, training(Attrition_split), type = "prob")[,2],
-    training(Attrition_split)$Attrition)
+Tree_Prediction_0.01a <- ROCR::prediction(
+    predict(Tree_0.01, TRAIN, type = "prob")[,2],
+    TRAIN$Attrition)
+Tree_Prediction_0.02a <- ROCR::prediction(
+    predict(Tree_0.02, TRAIN, type = "prob")[,2],
+    TRAIN$Attrition)
+Tree_Prediction_0.03a <- ROCR::prediction(
+    predict(Tree_0.03, TRAIN, type = "prob")[,2],
+    TRAIN$Attrition)
 
-    DATA_train <- training(Attrition_split) %>%
+#training(Attrition_split) %>%
+    DATA_train <- TRAIN %>%
         select(Attrition) %>%
         mutate(Attrition = case_match(Attrition,
                                       'Yes' ~ 1,
                                       'No' ~ 0)) %>%
         bind_cols(Prediction =
-            unlist(Tree_Prediction_0.01@predictions,
+            unlist(Tree_Prediction_0.01a@predictions,
                 use.names = FALSE)) %>%
         bind_cols(Prediction_0.02 =
-            unlist(Tree_Prediction_0.02@predictions,
+            unlist(Tree_Prediction_0.02a@predictions,
                 use.names = FALSE)) %>%
         bind_cols(Prediction_0.03 =
-            unlist(Tree_Prediction_0.03@predictions,
+            unlist(Tree_Prediction_0.03a@predictions,
                 use.names = FALSE))
 ```
 
 ```{r Performance of CART model - TEST}
-Tree_Prediction_0.01 <- ROCR::prediction(
-    predict(Tree_0.01, testing(Attrition_split), type = "prob")[,2],
-    testing(Attrition_split)$Attrition)
-Tree_Prediction_0.02 <- ROCR::prediction(
-    predict(Tree_0.02, testing(Attrition_split), type = "prob")[,2],
-    testing(Attrition_split)$Attrition)
-Tree_Prediction_0.03 <- ROCR::prediction(
-    predict(Tree_0.03, testing(Attrition_split), type = "prob")[,2],
-    testing(Attrition_split)$Attrition)
+Tree_Prediction_0.01b <- ROCR::prediction(
+    predict(Tree_0.01, TEST, type = "prob")[,2],
+    TEST$Attrition)
+Tree_Prediction_0.02b <- ROCR::prediction(
+    predict(Tree_0.02, TEST, type = "prob")[,2],
+    TEST$Attrition)
+Tree_Prediction_0.03b <- ROCR::prediction(
+    predict(Tree_0.03, TEST, type = "prob")[,2],
+    TEST$Attrition)
 
-    DATA_test <- testing(Attrition_split) %>%
+#testing(Attrition_split) %>%
+    DATA_test <- TEST %>% 
         select(Attrition) %>%
         mutate(Attrition = case_match(Attrition,
                                       'Yes' ~ 1,
                                       'No' ~ 0)) %>%
         bind_cols(Prediction =
-            unlist(Tree_Prediction_0.01@predictions,
+            unlist(Tree_Prediction_0.01b@predictions,
                 use.names = FALSE)) %>%
         bind_cols(Prediction_0.02 =
-            unlist(Tree_Prediction_0.02@predictions,
+            unlist(Tree_Prediction_0.02b@predictions,
                 use.names = FALSE)) %>%
         bind_cols(Prediction_0.03 =
-            unlist(Tree_Prediction_0.03@predictions,
+            unlist(Tree_Prediction_0.03b@predictions,
                 use.names = FALSE))
 ```
 
@@ -320,35 +335,38 @@ cowplot::plot_grid(gTree_0.01_train, gTree_0.01_test, gTree_0.02_train,
                    ncol = 2, labels=c())
 ```
 
+
 ```{r Tidy up CART}
 rm(Tree_0.01, Tree_0.02, Tree_0.03)
-rm(Tree_Prediction_0.01, Tree_Prediction_0.02, Tree_Prediction_0.03)
+rm(Tree_Prediction_0.01a, Tree_Prediction_0.02a, Tree_Prediction_0.03a)
+rm(Tree_Prediction_0.01b, Tree_Prediction_0.02b, Tree_Prediction_0.03b)
 rm(gTree_0.01_test, gTree_0.01_train, gTree_0.02_test,
    gTree_0.02_train, gTree_0.03_test, gTree_0.03_train)
 rm(AUC_0.01_test, AUC_0.01_train, AUC_0.02_test,
    AUC_0.02_train, AUC_0.03_test, AUC_0.03_train)
-rm(DATA_test, DATA_train, TEST, TRAIN)
+rm(DATA_test, DATA_train)
 rm(rpartPlot_0.02, TABLE1)
 ```
-While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas further would distract from the focus on the social implication of the use of the Home Office model. 
+
+While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas further would distract from the focus on the social implications of the use of the Home Office model. 
 
 # From a tree to a forest
 
-While CART is a useful technique, it has some significant weaknesses. In particular it is very dependent on the exact data fed to it, and often works very poorly on new data. Given that the purpose of the Home Office work is to identify future marriages that are felt to be at high risk of being sham marriages, this is not desirable. for this reason, it is common to use an extension of CART, known as random forests.
+While CART is a useful technique, it has some significant weaknesses. In particular it is very dependent on the exact data fed to it, and often works very poorly on new data. Given that the purpose of the Home Office work is to identify future marriages that are felt to be at high risk of being sham marriages, this is not desirable. For this reason, it is common to use an extension of CART, known as random forests.
 
-The key idea behind random forests is to look across many possible classification trees, rather than looking for a single optimum tree. These trees are designed to be different, and to cover a very wide range of possible variables. Each tree is fitted to a random subset of the available variables in the model. The final classification is made across all of these trees. A more detailed non-technical introduction is here, and the original work is from Leo Breiman (2001).
+The key idea behind random forests is to look across many possible classification trees, rather than looking for a single optimum tree. These trees are designed to be different, and to cover a very wide range of possible variables. Each tree is fitted to a random subset of the available variables in the model. The final classification is made across all of these trees. A more detailed non-technical introduction is here, and the original work is from Leo Breiman (2001). 
 
-Models are developed on a set of data, in our example case, fictitious data based on people leaving IBM, and in our substantive case, data collected from UK marriage registrars, at some time before a proposed marriage. Each random forest produces a large number of CAR trees, like those previously shown, developed from a random subset of the available variables. The final prediction comes from an average of these trees.
+To illustrate these ideas and exemplar case will be presented, using fictitious data based on people leaving IBM, and in our substantive case, data collected from UK marriage registrars, at some time before a proposed marriage. Each random forest produces a large number of CAR trees, like those previously shown, developed from a random subset of the available variables. The final prediction comes from an average of these trees.
 
 ```{r One RandomForest}
 # number of features
-n_features <- length(setdiff(names(Attrition), "Attrition"))
+n_features <- length(names(Attrition)) - 2 # Training and Attrition
 
 set.seed(5)
 # train a default random forest model on the Training data
 attr_rf <- ranger(
   Attrition ~ ., 
-  data = training(Attrition_split),
+  data = TRAIN,
   num.trees = 1000,
   mtry = floor(n_features / 3),
   probability=TRUE,
@@ -367,18 +385,20 @@ importance(attr_rf)
 ```
 
 ```{r Predict from random forest}
-predict_ranger_train <- predict(attr_rf, training(Attrition_split))
-predict_ranger_test <- predict(attr_rf, testing(Attrition_split))
+predict_ranger_train <- predict(attr_rf, TRAIN)
+predict_ranger_test <- predict(attr_rf, TEST)
 
 predictions_train <- predictions(predict_ranger_train)
 predictions_test <- predictions(predict_ranger_test)
 
-RF_data_train = bind_cols(Attrition = as.numeric(training(Attrition_split)$Attrition) - 1,
+RF_data_train = bind_cols(Attrition = as.numeric(TRAIN$Attrition) - 1,
                     Prediction = predictions_train[,2])
 
-RF_data_test = bind_cols(Attrition = as.numeric(testing(Attrition_split)$Attrition) - 1,
+RF_data_test = bind_cols(Attrition = as.numeric(TEST$Attrition) - 1,
                     Prediction = predictions_test[,2])
 ```
+
+Fitting the random forest model, produces a set of predictions, and one summary of these prediction is shown in the graph for training and test data. The predictions are better than those of the CAR tree model for both data sets, but there is a considerable gap between the outcome for the training data, on which the model was developed, and the test data, which is real data which was not used to train the model.
 
 ```{r Plots from random forest}
 gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
@@ -436,7 +456,7 @@ Note that the relative impact of the variables is rather different from the case
 
 ## Performance on Training and Test data
 
-There are a wide range of measures proposed to measure the performance of machine learning models. These cover a range of objectives, and there is no single measure of performance that is optimal in all circumstances. For purposes of illustration, it is useful to compare a range of measures between the training data, which was used to develop the random forest model, and the test data, which is a smaller sample held out to assess the performance of the model on new data.
+There are a wide range of measures proposed to measure the performance of machine learning models. These cover a range of objectives, and there is no single measure of performance that is optimal in all circumstances. For purposes of illustration, it is useful to compare a range of measures between the training data, and the test data.
 
 ```{r Performance on Training and Test data}
 Performance_training <- RF_data_train %>%
@@ -596,7 +616,7 @@ AUC_calc <- function(data, d, m) {
   m <- data[[m]]
 
   DATA <- bind_cols(Truth = d, Prediction = m)
-    cat('str(DATA',str(DATA),'\n')
+#    cat('str(DATA',str(DATA),'\n')
   
   DATA <- DATA %>%
     arrange(desc(Prediction)) %>%
@@ -617,34 +637,23 @@ rm(RF_data_test, RF_data_train)
 ```
 
 ```{r Setup for Random Error}
-set.seed(465465)
-
-# Add a training variable to Attrition
-
-Attrition <- Attrition %>%
-  mutate(Training = FALSE)
-
-# Add a variable to indicate training set or test set.
- Attrition$Training[Attrition_split$in_id] <- TRUE
-    table(Attrition$Attrition,Attrition$Training)
-
-# Make test and training datasets
-TRAIN <- Attrition %>% filter(Training)
-TEST  <- Attrition %>% filter(!Training)
-```
-
-```{r Random forest check}
 set.seed(5)
 
 # Add noise to Attrition
-TRAIN <- TRAIN %>%
+Working <- Attrition %>%
   mutate(NoisyAttrition =
            swap_YesNo(Attrition, prob = 0.1))
+TRAIN <- Working %>% filter(Training)
+TEST  <- Working %>% filter(!Training)
   table(TRAIN$Attrition, TRAIN$NoisyAttrition)
+  table(TEST$Attrition, TEST$NoisyAttrition)
 
+```
+
+```{r Random forest check}
 
 # number of features
-n_features <- length(setdiff(names(Attrition), "Attrition")) - 2
+n_features <- length(names(Attrition)) - 2 # Training and Attrition
 
 # train a default random forest model on the Training data
 # We have to remove the original Attrition, and the Training variables
@@ -719,18 +728,23 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for simulation}
+```{r Function for noisy simulation}
 
-OneModel <- function(train, test, prob = 0.0){
+OneModel <- function(Data, prob = 0.0){
+  # number of features
+  n_features <- length(names(Data)) - 2 # Training and Attrition
+
   probability_of_swapping <- prob
+  
+  Working <- Data %>%
+  mutate(NoisyAttrition =
+           swap_YesNo(Attrition, prob = probability_of_swapping))
 
-  TRAIN <- train %>%
-    mutate(NoisyAttrition =
-           swap_YesNo(Attrition,
-                      prob = probability_of_swapping))
-            cat('TABLE \n',table(TRAIN$Attrition,
-                  TRAIN$NoisyAttrition),'\n')
-  TEST <- test
+  TRAIN <- Working %>% filter(Training)
+  TEST  <- Working %>% filter(!Training)
+
+#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$NoisyAttrition),'\n')
+#  cat('TABLE \n',table(TEST$Attrition, TEST$NoisyAttrition),'\n')
 
 # train a default random forest model on the Training data
 attr_rf1 <- ranger(
@@ -756,7 +770,10 @@ attr_rf1 <- ranger(
   RF_data_train_2 = bind_cols(NoisyAttrition = TRAIN$NoisyAttrition,
                     Prediction = predictions_train[,2])
 
-  RF_data_test = bind_cols(Attrition = TEST$Attrition,
+  RF_data_test_1 = bind_cols(Attrition = TEST$Attrition,
+                    Prediction = predictions_test[,2])
+  
+  RF_data_test_2 = bind_cols(NoisyAttrition = TEST$NoisyAttrition,
                     Prediction = predictions_test[,2])
 
  # plot(pROC::roc(RF_data$NoisyAttrition, RF_data$Prediction))
@@ -766,37 +783,46 @@ attr_rf1 <- ranger(
   Area_under_Curve_train_2 <- AUC_calc(RF_data_train_2,
                              d = 'NoisyAttrition',
                              m = 'Prediction')
-  Area_under_Curve_test   <- AUC_calc(RF_data_test,
+  Area_under_Curve_test_1   <- AUC_calc(RF_data_test_1,
                              d = 'Attrition',
                              m = 'Prediction')
+  Area_under_Curve_test_2   <- AUC_calc(RF_data_test_2,
+                             d = 'NoisyAttrition',
+                             m = 'Prediction')
 #cat(Area_under_Curve,"\n")
-return(c(AUC_Truth = Area_under_Curve_train_1,
-            AUC_Noisy = Area_under_Curve_train_2, 
-            AUC_Test  = Area_under_Curve_test))
+return(c(AUC_Train1 = Area_under_Curve_train_1,
+            AUC_Train2 = Area_under_Curve_train_2, 
+            AUC_Test1  = Area_under_Curve_test_1,
+            AUC_Test2  = Area_under_Curve_test_2
+         ))
 }
 
-OneModel(train = TRAIN, test = TEST, prob = 0.0)
-# AUC_Truth AUC_Noisy  AUC_Test 
-# 0.9501859 0.9501859 0.8076861
+OneModel(Data = Attrition, prob = 0.0)
+# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
+# 0.9514332  0.9514332  0.8088727  0.8088727
+# 
+OneModel(Data = Attrition, prob = 0.1)
+# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
+# 0.9364651  0.9397594  0.7918285  0.6844828 
 
-OneModel(train = TRAIN, test = TEST, prob = 0.2)
-#AUC_Truth AUC_Noisy  AUC_Test 
-#0.8523981 0.9549700 0.7540723 
-
-```
-
-```{r Run the simulations (SLOW)}
-#ModelSims <- seq(0,0.15, 0.01) %>%
-#     set_names() %>%
-#     map(~replicate(1000, OneModel(train = TRAIN, test = TEST, prob = .x) ) )
-
-#readr::write_rds(ModelSims, file = "data/ModelSims.Rds")
-ModelSims <- readr::read_rds(file = "data/ModelSims.Rds")
+OneModel(Data = Attrition, prob =  0.2)
+# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
+# 0.8936459  0.9458443  0.7446602  0.5843497 
 
 ```
 
-```{r Post-process the simulations}
-D <- do.call(rbind, lapply(ModelSims, data.frame)) %>%
+```{r Run the noisy simulations (SLOW)}
+ModelNoisySims <- seq(0,0.15, 0.01) %>%
+     set_names() %>%
+     map(~replicate(1000, OneModel(Data = Attrition, prob = .x) ) )
+
+readr::write_rds(ModelNoisySims, file = "data/ModelNoisySims.Rds")
+#ModelNoisySims <- readr::read_rds(file = "data/ModelNoisySims.Rds")
+
+```
+
+```{r Post-process the noisy simulations}
+D <- do.call(rbind, lapply(ModelNoisySims, data.frame)) %>%
   rownames_to_column('NAME') %>%
   mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
   mutate(Type = str_extract(NAME,"[^_]+$")) %>%
@@ -915,21 +941,12 @@ table(XX,Variable)
 ```{r Setup for Bias}
 set.seed(465465)
 
-# Add a training variable to Attrition
-
-Attrition <- Attrition %>%
-  mutate(Training = FALSE)
-
-# Add a variable to indicate training set or test set.
- Attrition$Training[Attrition_split$in_id] <- TRUE
-    table(Attrition$Attrition,Attrition$Training)
-
 # Add bias to Attrition
 Working <- Attrition %>%
   mutate(BiassedAttrition =
            bias_YesNo(Variable = Attrition,
                        Source_of_bias = as.numeric(EnvironmentSatisfaction),
-                       Level_of_bias = 0.1))
+                       Level_of_bias = 0.0))
   table(Working$Attrition, Working$BiassedAttrition)
 
 # Make test and training datasets
@@ -1012,8 +1029,7 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-
-```{r Function for simulation}
+```{r Function for biassed simulation}
 
 OneBiassedModel <- function(train, test, Source_of_bias, Level_of_bias = 0.1){
 
@@ -1024,12 +1040,11 @@ OneBiassedModel <- function(train, test, Source_of_bias, Level_of_bias = 0.1){
                       Level_of_bias = Level_of_bias))
             table(Working$Attrition,
                   Working$BiassedAttrition)
-}
 
 # train a default random forest model on the Training data
 attr_rf1 <- ranger(
   BiassedAttrition ~ ., 
-  data = Working %>% select(-Attrition, -Training),
+  data = TRAIN %>% select(-Attrition, -Training),
   num.trees = 1000,
   mtry = floor(n_features / 3),
   probability=TRUE,
@@ -1037,17 +1052,16 @@ attr_rf1 <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-
-  predict_ranger_train <- predict(attr_rf1, Working)
+  predict_ranger_train <- predict(attr_rf1, TRAIN)
   predict_ranger_test <- predict(attr_rf1, TEST)
 
   predictions_train <- predictions(predict_ranger_train)
   predictions_test <- predictions(predict_ranger_test)
 
-  RF_data_train_1 = bind_cols(Attrition = Working$Attrition,
+  RF_data_train_1 = bind_cols(Attrition = TRAIN$Attrition,
                     Prediction = predictions_train[,2])
 
-  RF_data_train_2 = bind_cols(NoisyAttrition = Working$BiassedAttrition,
+  RF_data_train_2 = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
                     Prediction = predictions_train[,2])
 
   RF_data_test = bind_cols(Attrition = TEST$Attrition,
@@ -1071,28 +1085,38 @@ return(c(AUC_Truth = Area_under_Curve_train_1,
 
 OneBiassedModel(train = TRAIN, test = TEST,
          Source_of_bias = EnvironmentSatisfaction,
-         Level_of_bias = 0.6)
+         Level_of_bias = 0.0)
 # AUC_Truth AUC_Noisy  AUC_Test 
-# 0.9501859 0.9501859 0.8076861
+# 0.9509013   0.9509013   0.8027778
 
-OneModel(train = TRAIN, test = TEST, prob = 0.2)
-#AUC_Truth AUC_Noisy  AUC_Test 
-#0.8523981 0.9549700 0.7540723 
+OneBiassedModel(train = TRAIN, test = TEST,
+         Source_of_bias = EnvironmentSatisfaction,
+         Level_of_bias = 0.1)
+# AUC_Truth AUC_Biassed    AUC_Test 
+# 0.9375963   0.9325925   0.8116235 
+
+OneBiassedModel(train = TRAIN, test = TEST,
+         Source_of_bias = EnvironmentSatisfaction,
+         Level_of_bias = 0.2)
+# AUC_Truth AUC_Biassed    AUC_Test 
+#  0.9177978   0.9428623   0.7986785 
 
 ```
 
-```{r Run the simulations (SLOW)}
-#ModelSims <- seq(0,0.15, 0.01) %>%
+```{r Run the bias simulations (SLOW)}
+#ModelBiassedSims <- seq(0,0.15, 0.01) %>%
 #     set_names() %>%
-#     map(~replicate(1000, OneModel(train = TRAIN, test = TEST, prob = .x) ) )
-
-#readr::write_rds(ModelSims, file = "data/ModelSims.Rds")
-ModelSims <- readr::read_rds(file = "data/ModelSims.Rds")
+#     map(~replicate(1000, OneBiassedModel(train = TRAIN, test = TEST,
+#                                          Source_of_bias = EnvironmentSatisfaction,
+#                                          Level_of_bias = .x) ) )
+#
+#readr::write_rds(ModelBiassedSims, file = "data/ModelBiassedSims.Rds")
+ModelBiassedSims <- readr::read_rds(file = "data/ModelBiassedSims.Rds")
 
 ```
 
-```{r Post-process the simulations}
-D <- do.call(rbind, lapply(ModelSims, data.frame)) %>%
+```{r Post-process the biassed simulations}
+D <- do.call(rbind, lapply(ModelBiassedSims, data.frame)) %>%
   rownames_to_column('NAME') %>%
   mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
   mutate(Type = str_extract(NAME,"[^_]+$")) %>%
@@ -1108,15 +1132,15 @@ D <- D %>%
 arrange(Type, Error_rate, Index)
 ```
 
-```{r Graph the random error simulations}
+```{r Graph the biassed simulations}
 
 ggplot(data <- D,
        aes(x = AUC, y = Error_pct, group = interaction(Type,Error_rate),
            colour = Type, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
-    labs(title = 'Impact of increasing level of error on training and test datasets',
+    labs(title = 'Impact of increasing level of bias on training and test datasets',
          x = "Area under Curve",
-         y = "Simulated error rate in training data") +
+         y = "Simulated bias rate in training data") +
     theme_minimal() +
     coord_cartesian(xlim = c(0.7,1)) +
     scale_y_discrete(limits = rev)
