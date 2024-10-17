@@ -790,24 +790,24 @@ attr_rf1 <- ranger(
                              d = 'NoisyAttrition',
                              m = 'Prediction')
 #cat(Area_under_Curve,"\n")
-return(c(AUC_Train1 = Area_under_Curve_train_1,
-            AUC_Train2 = Area_under_Curve_train_2, 
-            AUC_Test1  = Area_under_Curve_test_1,
-            AUC_Test2  = Area_under_Curve_test_2
+return(c(AUC_Train_Attrition = Area_under_Curve_train_1,
+            AUC_Train_Noise = Area_under_Curve_train_2, 
+            AUC_Test_Attrition  = Area_under_Curve_test_1,
+            AUC_Test_Noise  = Area_under_Curve_test_2
          ))
 }
 
 OneModel(Data = Attrition, prob = 0.0)
-# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
-# 0.9514332  0.9514332  0.8088727  0.8088727
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
+#          0.9505894           0.9505894           0.8108145           0.8108145 
 # 
 OneModel(Data = Attrition, prob = 0.1)
-# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
-# 0.9364651  0.9397594  0.7918285  0.6844828 
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
+#          0.9274953           0.9374958           0.7825512           0.7087735  
 
 OneModel(Data = Attrition, prob =  0.2)
-# AUC_Train1 AUC_Train2  AUC_Test1  AUC_Test2 
-# 0.8936459  0.9458443  0.7446602  0.5843497 
+# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
+#          0.8411537           0.9215150           0.7183118           0.5611185
 
 ```
 
@@ -825,8 +825,10 @@ readr::write_rds(ModelNoisySims, file = "data/ModelNoisySims.Rds")
 D <- do.call(rbind, lapply(ModelNoisySims, data.frame)) %>%
   rownames_to_column('NAME') %>%
   mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
+  mutate(Set = str_extract(NAME,"\\_(.*?)\\_")) %>%
+  mutate(Set = str_replace_all(Set, "\\_", "" )) %>%
   mutate(Type = str_extract(NAME,"[^_]+$")) %>%
-  select(NAME,Error_rate,Type,X1:X1000)
+  select(NAME,Error_rate,Set,Type,X1:X1000)
 
 D <- D %>%
   pivot_longer(cols=starts_with('X'),
@@ -835,20 +837,20 @@ D <- D %>%
                names_to = 'Index',
                values_to = 'AUC') %>%
   mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
-arrange(Type, Error_rate, Index)
+arrange(Set, Type, Error_rate, Index)
 ```
 
 ```{r Graph the random error simulations}
 
 ggplot(data <- D,
-       aes(x = AUC, y = Error_pct, group = interaction(Type,Error_rate),
-           colour = Type, fill = Type)) +
+       aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
+           colour = Set, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
     labs(title = 'Impact of increasing level of error on training and test datasets',
          x = "Area under Curve",
          y = "Simulated error rate in training data") +
     theme_minimal() +
-    coord_cartesian(xlim = c(0.7,1)) +
+    coord_cartesian(xlim = c(0.5,1)) +
     scale_y_discrete(limits = rev)
 
 ```
@@ -865,7 +867,7 @@ Random error can also be described as noise. It is a source of variation in the 
 
 In our substantive example, if registrars were more likely to refer people for investigation who had certain characteristics, but which were not in fact associated with sham marriage, this could give rise to systematic injustice and a range of harms. This is acknowledged by the Home Office AQA review which lists as one of the model assumption "Historical decisions (which determine target variable labels for model training) are accurate and free from bias." (AAQ page 3, Section 4). The variable used in the Home Office model have been redacted from their report, but by implication from the text, the opinion of the registrar as to the interaction between the couple, and the age difference between the couple are among those considered (EIA page 6 and 7).
 
-In order to model bias, it is necessary to choose sources for the bias. For illustrative purpose only, let's take the Variable EnvironmentSatisfaction. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition. To illustrate the impact of bias we shift the values of attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section.
+In order to model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition. To illustrate the impact of bias we shift the values of attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section.
 
 ```{r bias_binary function}
 
@@ -887,7 +889,7 @@ range(s)
 # Switches a proportion of 1/0 values to 0/1
 #  depending on the value of another variable, and a parameter called Level_of_bias
 #  
-bias_YesNo <- function(Variable, Source_of_bias, Level_of_bias = 0.1) {
+bias_YesNo <- function(Variable, Source_of_bias, Level_of_bias = 0.0) {
   N   <- length(Variable)
 
 # Check to see if there is one value of Source_of_bias for every value of Variable
@@ -900,10 +902,11 @@ bias_YesNo <- function(Variable, Source_of_bias, Level_of_bias = 0.1) {
 #  cat('Source_of_bias_scaled',Source_of_bias_scaled,'\n')
 
     size <- 1 # Each trial is a single attempt
-    prob <- Source_of_bias_scaled * Level_of_bias
+    prob <- pmin(Source_of_bias_scaled * Level_of_bias, 1) # Limit to 1
 # Draw  1 random 0/1 per value in A
     RANDOM <- rbinom(N,size,prob)
-
+#    cat(' N, size, prob', N, size, prob, '\n')
+#    cat('RANDOM ', RANDOM, '\n')
   A <- bind_cols(Variable = Variable, RANDOM  = RANDOM)
 #  cat('str (A)', str(A),'\n')
   for (i in seq_along(A$Variable)) {
@@ -917,7 +920,7 @@ bias_YesNo <- function(Variable, Source_of_bias, Level_of_bias = 0.1) {
         A$Variable[i] = 'Yes'
     } else
       if (A$Variable[i] == 'Yes' && A$RANDOM[i] == 1) {
-        A$Variable[i] = 'No'
+        A$Variable[i] = 'Yes' # Introduces an asymmetry
       }
 }
 
@@ -925,17 +928,27 @@ return(A$Variable)
 }
 
 # Check
-TEST <- rbinom(25,1,0.4)
+TEST <- rbinom(400,1,0.2)
 Variable <- as_factor(TEST) %>% fct_inorder() %>% fct_recode(Yes = '1', No = '0')
-Source <-   c(1,2,3,4,1,2,3,4,4,3,2,1,4,3,2,1,1,2,3,4,4,3,2,1,4) 
+Source <-   rep(c(0,1,2,3,4),80) 
 table(Variable,Source)
-XX <- bias_YesNo(Variable, Source, Level_of_bias = 0.0)
-table(XX,Variable)
-XX <- bias_YesNo(Variable, Source, Level_of_bias = 0.1)
-table(XX,Variable)
-XX <- bias_YesNo(Variable, Source, Level_of_bias = 1.0)
-table(XX,Variable)
 
+DATA <- bind_cols(Variable = Variable, Source = Source) %>%
+  mutate(Bias_0.0 = bias_YesNo(Variable, Source, Level_of_bias = 0.0)) %>%
+  mutate(Bias_0.05 = bias_YesNo(Variable, Source, Level_of_bias = 0.05)) %>%
+  mutate(Bias_0.1 = bias_YesNo(Variable, Source, Level_of_bias = 0.1)) %>%
+  mutate(Bias_0.15 = bias_YesNo(Variable, Source, Level_of_bias = 0.15)) %>%
+  mutate(Bias_0.2 = bias_YesNo(Variable, Source, Level_of_bias = 0.2)) %>%
+  mutate(Bias_1.0 = bias_YesNo(Variable, Source, Level_of_bias = 1.0))
+  
+table(DATA$Variable, DATA$Bias_0.0, DATA$Source)
+table(DATA$Variable, DATA$Bias_0.05, DATA$Source)
+table(DATA$Variable, DATA$Bias_0.1, DATA$Source)
+table(DATA$Variable, DATA$Bias_0.15, DATA$Source)
+table(DATA$Variable, DATA$Bias_0.2, DATA$Source)
+table(DATA$Variable, DATA$Bias_1.0, DATA$Source)
+
+rm(DATA)
 ```
 
 ```{r Setup for Bias}
@@ -1031,15 +1044,22 @@ cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 
 ```{r Function for biassed simulation}
 
-OneBiassedModel <- function(train, test, Source_of_bias, Level_of_bias = 0.1){
+OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
+  # number of features
+  n_features <- length(names(Data)) - 2 # Training and Attrition
 
-  TRAIN <- train %>%
+  Working <- Data %>%
     mutate(BiassedAttrition =
            bias_YesNo(Attrition,
                       Source_of_bias = as.numeric(EnvironmentSatisfaction),
                       Level_of_bias = Level_of_bias))
-            table(Working$Attrition,
-                  Working$BiassedAttrition)
+
+  TRAIN <- Working %>% filter(Training)
+  TEST  <- Working %>% filter(!Training)
+
+  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
+  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
+
 
 # train a default random forest model on the Training data
 attr_rf1 <- ranger(
@@ -1064,7 +1084,10 @@ attr_rf1 <- ranger(
   RF_data_train_2 = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
                     Prediction = predictions_train[,2])
 
-  RF_data_test = bind_cols(Attrition = TEST$Attrition,
+  RF_data_test_1 = bind_cols(Attrition = TEST$Attrition,
+                    Prediction = predictions_test[,2])
+  
+  RF_data_test_2 = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
                     Prediction = predictions_test[,2])
 
  # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
@@ -1074,44 +1097,49 @@ attr_rf1 <- ranger(
   Area_under_Curve_train_2 <- AUC_calc(RF_data_train_2,
                              d = 'BiassedAttrition',
                              m = 'Prediction')
-  Area_under_Curve_test   <- AUC_calc(RF_data_test,
+  Area_under_Curve_test_1   <- AUC_calc(RF_data_test_1,
                              d = 'Attrition',
                              m = 'Prediction')
+  Area_under_Curve_test_2   <- AUC_calc(RF_data_test_2,
+                             d = 'BiassedAttrition',
+                             m = 'Prediction')
 #cat(Area_under_Curve,"\n")
-return(c(AUC_Truth = Area_under_Curve_train_1,
-            AUC_Biassed = Area_under_Curve_train_2, 
-            AUC_Test  = Area_under_Curve_test))
+return(c(AUC_Train_Attrition = Area_under_Curve_train_1,
+            AUC_Train_Bias = Area_under_Curve_train_2, 
+            AUC_Test_Attrition  = Area_under_Curve_test_1,
+            AUC_Test_Bias  = Area_under_Curve_test_2
+         ))
 }
 
-OneBiassedModel(train = TRAIN, test = TEST,
+OneBiassedModel(Data = Attrition,
          Source_of_bias = EnvironmentSatisfaction,
          Level_of_bias = 0.0)
-# AUC_Truth AUC_Noisy  AUC_Test 
-# 0.9509013   0.9509013   0.8027778
+# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+# 0.9512131               0.9512131        0.8051510                0.8051510 
+          
 
-OneBiassedModel(train = TRAIN, test = TEST,
+OneBiassedModel(Data = Attrition,
          Source_of_bias = EnvironmentSatisfaction,
          Level_of_bias = 0.1)
-# AUC_Truth AUC_Biassed    AUC_Test 
-# 0.9375963   0.9325925   0.8116235 
-
-OneBiassedModel(train = TRAIN, test = TEST,
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9387764           0.9309477           0.8013215           0.7457398 
+OneBiassedModel(Data = Attrition,
          Source_of_bias = EnvironmentSatisfaction,
          Level_of_bias = 0.2)
-# AUC_Truth AUC_Biassed    AUC_Test 
-#  0.9177978   0.9428623   0.7986785 
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9333101           0.9365522           0.8024002           0.6653573 
 
 ```
 
-```{r Run the bias simulations (SLOW)}
-#ModelBiassedSims <- seq(0,0.15, 0.01) %>%
-#     set_names() %>%
-#     map(~replicate(1000, OneBiassedModel(train = TRAIN, test = TEST,
-#                                          Source_of_bias = EnvironmentSatisfaction,
-#                                          Level_of_bias = .x) ) )
+```{r Run the biassed simulations (SLOW)}
+ModelBiassedSims <- seq(0,0.15, 0.01) %>%
+     set_names() %>%
+     map(~replicate(1000, OneBiassedModel(Data = Attrition,
+                                          Source_of_bias = EnvironmentSatisfaction,
+                                          Level_of_bias = .x) ) )
 #
-#readr::write_rds(ModelBiassedSims, file = "data/ModelBiassedSims.Rds")
-ModelBiassedSims <- readr::read_rds(file = "data/ModelBiassedSims.Rds")
+readr::write_rds(ModelBiassedSims, file = "data/ModelBiassedSims.Rds")
+#ModelBiassedSims <- readr::read_rds(file = "data/ModelBiassedSims.Rds")
 
 ```
 
@@ -1119,8 +1147,10 @@ ModelBiassedSims <- readr::read_rds(file = "data/ModelBiassedSims.Rds")
 D <- do.call(rbind, lapply(ModelBiassedSims, data.frame)) %>%
   rownames_to_column('NAME') %>%
   mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
+  mutate(Set = str_extract(NAME,"\\_(.*?)\\_")) %>%
+  mutate(Set = str_replace_all(Set, "\\_", "" )) %>%
   mutate(Type = str_extract(NAME,"[^_]+$")) %>%
-  select(NAME,Error_rate,Type,X1:X1000)
+  select(NAME,Error_rate,Set,Type,X1:X1000)
 
 D <- D %>%
   pivot_longer(cols=starts_with('X'),
@@ -1129,20 +1159,20 @@ D <- D %>%
                names_to = 'Index',
                values_to = 'AUC') %>%
   mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
-arrange(Type, Error_rate, Index)
+  arrange(Set, Type, Error_rate, Index)
 ```
 
 ```{r Graph the biassed simulations}
 
 ggplot(data <- D,
-       aes(x = AUC, y = Error_pct, group = interaction(Type,Error_rate),
-           colour = Type, fill = Type)) +
+       aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
+           colour = Set, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
     labs(title = 'Impact of increasing level of bias on training and test datasets',
          x = "Area under Curve",
          y = "Simulated bias rate in training data") +
     theme_minimal() +
-    coord_cartesian(xlim = c(0.7,1)) +
+    coord_cartesian(xlim = c(0.5,1)) +
     scale_y_discrete(limits = rev)
 
 ```
