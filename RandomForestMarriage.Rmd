@@ -27,12 +27,13 @@ library(knitr)
 #library(kable)
 library(kableExtra)
 library(vip)
-library(viridis)
+library(gridGraphics)
 
 
 knitr::opts_chunk$set(echo = FALSE, cache = TRUE,
-                      warning = NA, message = NA)
-knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+                      warning = NA, message = NA,
+                      fig.pos = 'H',
+                      cache.extra = knitr::rand_seed)
 
 set.seed(979)
 
@@ -148,14 +149,16 @@ Tree_0.03 <- rpart::prune(Tree_0.01, cp = 0.03)
 The first tree to emerge from this process is rather complicated, and perhaps too complicated to be of value. Such complex trees tend to overfit the data they are given, and perform markedly worse on new data than simpler trees.
 
 ```{r Tree_0.01 plot, fig.cap= 'Graph of the first CAR tree, complexity penalty set at the default value of 0.01, with variable names removed for clarity.', fig.dpi=1200, fig.height=10, fig.width=10 }
-rpart.plot::rpart.plot(Tree_0.01,
+RP <- rpart.plot::rpart.plot(Tree_0.01,
                        type = 3, clip.right.labs = FALSE,
                        branch = .3, under = TRUE,
                        cex=0.8, faclen=0, fallen.leaves=FALSE, clip.facs = TRUE)
 
+# Has to be manually saved
 ```
 
-It is possible to derive measure of the relative impact on the classification of the variables included in a tree, and this is referred to as 'variable importance'. For this tree the variable importance is shown in the table.
+
+It is possible to derive a measure of the relative impact on the classification of the individual variables included in a tree, and this is referred to as 'variable importance'. For this tree the variable importance is shown in the table.
 
 ```{r complex tree importance plot, fig.cap= 'Measure of the model based importance of the variables in the full tree.', fig.dpi=1200, fig.height=8, fig.width=10}
 
@@ -168,6 +171,8 @@ ggplot(data = vip::vi(Tree_0.01) %>% arrange(Importance) %>% filter(Importance >
     geom_col(colour = 'black', fill = 'lightblue') +
     theme_minimal() +
     theme(text = element_text(size = 20))
+
+# Has to be manually saved
 ```
 
 It's possible, and desirable, to simplify these trees, and a complexity penalty can be provided in the model for overly complex trees. This is set at 0.01, by default, but choosing to increase it to 0.03, a modest change, produces a very different, and perhaps more comprehensible, picture. This action is referred to as 'pruning'.
@@ -176,6 +181,7 @@ It's possible, and desirable, to simplify these trees, and a complexity penalty 
 rpart.plot::rpart.plot(Tree_0.03,
  type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE, mar = c(0,0,0,0))
 
+# Has to be manually saved
 ```
 
 This is a single CART (a tree), and it performs reasonably for predicting attrition. It is read from top to bottom. 
@@ -198,7 +204,7 @@ rpartPlot_0.02 <- rpart.plot::rpart.plot(Tree_0.02,
 
 The point is that a very minor change in one parameter, can produce a very different tree. Which of these is correct is probably not the right question, as both of the simpler trees are justifiable, but one may be more useful than the other for a particular purpose.
 
-## Performace of CAR Tree models
+## Performance of CAR Tree models
 
 There are several different ways to examine the performance of a classification model. Which one to use, depends mainly on the goals of the modelling exercise, and specifically on the costs of misclassification. One popular choice is a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss, that is a random classification, for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
 
@@ -349,6 +355,9 @@ gTree_0.03_test <- gTree_0.03_test +
 cowplot::plot_grid(gTree_0.01_train, gTree_0.01_test, gTree_0.02_train,
                    gTree_0.02_test, gTree_0.03_train, gTree_0.03_test,
                    ncol = 2, labels=c())
+
+ggsave("Images/CowPlot1.png")
+ggsave("Images/CowPlot1.pdf")
 ```
 
 
@@ -372,7 +381,7 @@ While CART is a useful technique, it has some significant weaknesses. In particu
 
 The key idea behind random forests is to look across many possible classification trees, rather than looking for a single optimum tree. These trees are designed to be different, and to cover a very wide range of possible variables. Each tree is fitted to a random subset of the available variables in the model. The final classification is made across all of these trees. A more detailed non-technical introduction is here, and the original work is from Leo Breiman (2001). 
 
-To illustrate these ideas and exemplar case will be presented, using fictitious data based on people leaving IBM, and in our substantive case, data collected from UK marriage registrars, at some time before a proposed marriage. Each random forest produces a large number of CAR trees, like those previously shown, developed from a random subset of the available variables. The final prediction comes from an average of these trees.
+To illustrate these ideas an exemplar case will be presented, using fictitious data based on people leaving IBM, and in our substantive case, data collected from UK marriage registrars, at some time before a proposed marriage. Each random forest produces a large number of CAR trees, like those previously shown, developed from a random subset of the available variables. The final prediction comes from an average of these trees.
 
 ```{r One RandomForest, results = 'hide'}
 # number of features
@@ -390,14 +399,14 @@ attr_rf <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-attr_rf
+#attr_rf
 
 # get OOB RMSE
-default_rmse <- sqrt(attr_rf$prediction.error)
+#default_rmse <- sqrt(attr_rf$prediction.error)
 ## [1] 0.33
 
 #treeInfo(attr_rf)
-importance(attr_rf)
+#importance(attr_rf)
 ```
 
 ```{r Predict from random forest}
@@ -519,7 +528,7 @@ Performance <- full_join(Performance_training, Performance_test,
   mutate(Type = fct_inorder(as_factor(Type)))
 ```
 
-This graph shows, for training and test data, a suite of indicators of performance. In different applications, some of these measures might be more or less important, however the finding that the model performs significantly worse on test data than on training data, is of importance.
+This graph shows, for training and test data, a suite of indicators of performance. In different applications, some of these measures might be more or less important, however the finding that this model performs significantly worse on test data than on training data, is both expected, and of practical importance.
 
 ```{r Graph performance on training and test data, fig.cap= 'Performance metrics for the random forest model on Training and Test datasets.', fig.dpi=1200, fig.height=6, fig.width=8}
 ggplot(data = Performance,
@@ -651,8 +660,8 @@ AUC_calc <- function(data, d, m) {
 return( AUC)
 }
 
-AUC_calc(RF_data_train, d = 'Attrition', m = 'Prediction')
-AUC_calc(RF_data_test, d = 'Attrition', m = 'Prediction')
+#AUC_calc(RF_data_train, d = 'Attrition', m = 'Prediction')
+#AUC_calc(RF_data_test, d = 'Attrition', m = 'Prediction')
 
 rm(RF_data_test, RF_data_train)
 ```
@@ -666,12 +675,12 @@ Working <- Attrition %>%
            swap_YesNo(Attrition, prob = 0.1))
 TRAIN <- Working %>% filter(Training)
 TEST  <- Working %>% filter(!Training)
-  table(TRAIN$Attrition, TRAIN$NoisyAttrition)
-  table(TEST$Attrition, TEST$NoisyAttrition)
+#  table(TRAIN$Attrition, TRAIN$NoisyAttrition)
+#  table(TEST$Attrition, TEST$NoisyAttrition)
 
 ```
 
-```{r Random forest check}
+```{r Random forest check, results = 'hide'}
 
 # number of features
 n_features <- length(names(Attrition)) - 2 # Training and Attrition
@@ -688,18 +697,18 @@ attr_rf1 <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-attr_rf1
+#attr_rf1
 
 # get OOB RMSE
-default_rmse <- sqrt(attr_rf1$prediction.error)
+#default_rmse <- sqrt(attr_rf1$prediction.error)
 ## [1] 0.33
 
 #treeInfo(attr_rf1)
-importance(attr_rf1)
+#importance(attr_rf1)
 
 ```
 
-```{r Predict from random forest 2}
+```{r Predict from Noisy random forest, results = 'hide'}
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
@@ -713,7 +722,7 @@ RF_data_test = bind_cols(Attrition = TEST$Attrition,
                     Prediction = predictions_test[,2])
 ```
 
-```{r Plots from random forest 2, results = 'hide'}
+```{r Plots from noisy random forest, results = 'hide'}
 gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
@@ -747,9 +756,13 @@ gTree_ranger_test <- gTree_ranger_test +
     )
 
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
+
+ggsave("Images/CowPlot2.png")
+ggsave("Images/CowPlot2.pdf")
+
 ```
 
-```{r Function for noisy simulation}
+```{r Function for noisy simulation, results = 'hide'}
 
 OneModel <- function(Data, prob = 0.0){
   # number of features
@@ -818,15 +831,15 @@ return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
          ))
 }
 
-OneModel(Data = Attrition, prob = 0.0)
+#OneModel(Data = Attrition, prob = 0.0)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
 #          0.9505894           0.9505894           0.8108145           0.8108145 
 # 
-OneModel(Data = Attrition, prob = 0.1)
+#OneModel(Data = Attrition, prob = 0.1)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
 #          0.9274953           0.9374958           0.7825512           0.7087735  
 
-OneModel(Data = Attrition, prob =  0.2)
+#OneModel(Data = Attrition, prob =  0.2)
 # AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition      AUC_Test_Noise 
 #          0.8411537           0.9215150           0.7183118           0.5611185
 
@@ -876,6 +889,8 @@ ggplot(data <- D,
     coord_cartesian(xlim = c(0.54,1)) +
     scale_y_discrete(limits = rev)
 
+ggsave("Images/Noise.png")
+ggsave("Images/Noise.pdf")
 ```
 
 In this graph each boxplot represents one set of 1,000 runs of an RF classifier. These are run with data for the training data set with various levels of random error added, ranging from none to 15%.
@@ -901,9 +916,11 @@ In our substantive example, if registrars were more likely to refer people for i
 
 This is acknowledged by the Home Office AQA review which lists as one of the model assumption "Historical decisions (which determine target variable labels for model training) are accurate and free from bias." (AAQ page 3, Section 4). The variable used in the Home Office model have been redacted from their report, but by implication from the text, the opinion of the registrar as to the interaction between the couple, and the age difference between the couple are among those considered (EIA page 6 and 7).
 
+## Effect of bias due to a moderate importance variable EnvironmentSatisfaction  
+
 In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition. To illustrate the impact of bias we shift the values of attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section.
 
-```{r Scaling functions}
+```{r Scaling functions, results = 'hide'}
 
 Scale_to_median_IQR <- function(Variable) {
   stopifnot( is.numeric( Variable ))
@@ -933,18 +950,18 @@ ScaledVariable <-
 }
 
 # Check
-s <- sort(rexp(100))
-range(s)
-s <- Scale_to_0_1(s)
-range(s)
-s <- sort(runif(1001, -100,+100))
-range(s)
-s <- Scale_to_minus_1_plus_1(s)
-range(s)
-rm(s)
+#s <- sort(rexp(100))
+#range(s)
+#s <- Scale_to_0_1(s)
+#range(s)
+#s <- sort(runif(1001, -100,+100))
+#range(s)
+#s <- Scale_to_minus_1_plus_1(s)
+#range(s)
+#rm(s)
 ```
 
-```{r bias_YesNo}
+```{r bias_YesNo, results = 'hide'}
 ################################################
 # Switches a proportion of 1/0 values to 0/1
 #  depending on the value of another variable, and a parameter called Level_of_bias
@@ -991,7 +1008,7 @@ return(A$Variable)
 TEST <- rbinom(400,1,0.2)
 Variable <- as_factor(TEST) %>% fct_inorder() %>% fct_recode(Yes = '1', No = '0')
 Source <-   rep(c(0,1,2,3,4),80) 
-table(Variable,Source)
+#table(Variable,Source)
 
 DATA <- bind_cols(Variable = Variable, Source = Source) %>%
   mutate(Bias_0.0 = bias_YesNo(Variable, Source, Level_of_bias = 0.0)) %>%
@@ -1001,12 +1018,12 @@ DATA <- bind_cols(Variable = Variable, Source = Source) %>%
   mutate(Bias_0.2 = bias_YesNo(Variable, Source, Level_of_bias = 0.2)) %>%
   mutate(Bias_1.0 = bias_YesNo(Variable, Source, Level_of_bias = 1.0))
   
-table(DATA$Variable, DATA$Bias_0.0, DATA$Source)
-table(DATA$Variable, DATA$Bias_0.05, DATA$Source)
-table(DATA$Variable, DATA$Bias_0.1, DATA$Source)
-table(DATA$Variable, DATA$Bias_0.15, DATA$Source)
-table(DATA$Variable, DATA$Bias_0.2, DATA$Source)
-table(DATA$Variable, DATA$Bias_1.0, DATA$Source)
+#table(DATA$Variable, DATA$Bias_0.0, DATA$Source)
+#table(DATA$Variable, DATA$Bias_0.05, DATA$Source)
+#table(DATA$Variable, DATA$Bias_0.1, DATA$Source)
+#table(DATA$Variable, DATA$Bias_0.15, DATA$Source)
+#table(DATA$Variable, DATA$Bias_0.2, DATA$Source)
+#table(DATA$Variable, DATA$Bias_1.0, DATA$Source)
 
 rm(DATA)
 ```
@@ -1131,14 +1148,14 @@ Working <- Attrition %>%
            bias_YesNo(Variable = Attrition,
                        Source_of_bias = as.numeric(EnvironmentSatisfaction),
                        Level_of_bias = 0.0))
-  table(Working$Attrition, Working$BiassedAttrition)
+#  table(Working$Attrition, Working$BiassedAttrition)
 
 # Make test and training datasets
 TRAIN <- Working %>% filter(Training)
 TEST  <- Working %>% filter(!Training)
 ```
 
-```{r Random forest bias EnvironmentSatisfaction check}
+```{r Random forest bias EnvironmentSatisfaction check, results = 'hide'}
 set.seed(5)
 # train a default random forest model on the Training data
 # We have to remove the original Attrition, and the Training variables
@@ -1152,18 +1169,18 @@ attr_rf1 <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-attr_rf1
+#attr_rf1
 
 # get OOB RMSE
-default_rmse <- sqrt(attr_rf1$prediction.error)
+#default_rmse <- sqrt(attr_rf1$prediction.error)
 ## [1] 0.33
 
 #treeInfo(attr_rf1)
-importance(attr_rf1)
+#importance(attr_rf1)
 
 ```
 
-```{r Predict from random forest bias EnvironmentSatisfaction }
+```{r Predict from random forest bias EnvironmentSatisfaction, results = 'hide' }
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
@@ -1177,7 +1194,7 @@ RF_data_test = bind_cols(Attrition = TEST$BiassedAttrition,
                     Prediction = predictions_test[,2])
 ```
 
-```{r Plots from random forest bias EnvironmentSatisfaction, results = 'hide'}
+```{r Plots from random forest bias EnvironmentSatisfaction, results = 'hide', eval=FALSE}
 gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
@@ -1213,7 +1230,7 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation EnvironmentSatisfaction}
+```{r Function for biassed simulation EnvironmentSatisfaction, results = 'hide'}
 
 OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
   # number of features
@@ -1282,21 +1299,21 @@ return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
          ))
 }
 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = EnvironmentSatisfaction,
-         Level_of_bias = 0.0)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = EnvironmentSatisfaction,
+#         Level_of_bias = 0.0)
 # AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 # 0.9512131               0.9512131        0.8051510                0.8051510 
           
 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = EnvironmentSatisfaction,
-         Level_of_bias = 0.1)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = EnvironmentSatisfaction,
+#         Level_of_bias = 0.1)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 #          0.9387764           0.9309477           0.8013215           0.7457398 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = EnvironmentSatisfaction,
-         Level_of_bias = 0.2)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = EnvironmentSatisfaction,
+#         Level_of_bias = 0.2)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 #          0.9333101           0.9365522           0.8024002           0.6653573 
 
@@ -1333,13 +1350,13 @@ D <- D %>%
   arrange(Set, Type, Error_rate, Index)
 ```
 
-```{r Graph the biassed simulations EnvironmentSatisfaction, fig.cap= 'Simulation based estimates of the effect of increasing bias on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations EnvironmentSatisfaction, fig.cap= 'Simulation based estimates of the effect of increasing bias due to EnvironmentSatisfaction on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
 ggplot(data <- D,
        aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
            colour = Set, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
-    labs(title = 'Impact of increasing level of bias on training and test datasets',
+    labs(title = 'Impact of increasing level of bias related to EnvironmentSatisfaction on training and test datasets',
          x = "Area under Curve",
          y = "Simulated bias rate in training data") +
     theme_minimal() +
@@ -1348,14 +1365,21 @@ ggplot(data <- D,
     coord_cartesian(xlim = c(0.54,1)) +
     scale_y_discrete(limits = rev)
 
+ggsave("Images/Bias_EnvironmentSatisfaction.png")
+ggsave("Images/Bias_EnvironmentSatisfaction.pdf")
 ```
 
-The overall pattern here is similar to that in the previous graph of the effects of random error. Compared to the training data both sets of test data have much worse performance. However, the variability in estimates is not as high when bias is added to the data, as when random noise is added to the data. This is probably because the bias only goes one way, with certain people more likely to be misclassified as at risk of 'Attrition', when in fact they are not.
+The overall pattern here is similar to that in the previous graph of the effects of random error. Compared to the training data both sets of test data have much worse performance. Notably the true data is better predicted than the biassed data.
+
+However, the variability in estimates is not as high when bias is added to the data, as when random noise is added to the data. This is because the bias only goes one way, with certain people more likely to be misclassified as at risk of 'Attrition', when in fact they are not. Real bias can be far more complicated than that modelled here.
 
 The impact of increasing bias is a little different on the training data, and the testing data. In both case, the estimates increase in variability, however, for the training data, the AUC is slightly better for the 'true' Attrition prediction than for the biassed prediction. This is likely because the addition of bias based on of a variable which is part of the model reduces the correlation of that variable with others, and hence of trees containing that variable, and so improves fit.
 
-A similar analysis for the variable Gender, which is the lowest importance variable in the whole data set (model-based importance of 0.11) confirms this hypothesis, and demonstrates some of the range of effects of bias on performance.
+It is of interest to examine both variables which make little contribution to the random forest, and those which make much larger contributions, as measured by the model-based importance. Two further potential sources of bias, the relatively unimportant (in these models) Gender variable, and the considerably more important Distance from Home variable, are modelled to see if the pattern of behaviour is similar.
 
+## Effect of bias of a low importance variable - Gender
+
+A similar analysis for the variable Gender, which is one of the lowest importance variable in the whole data set (model-based importance of 0.3) confirms this hypothesis, and demonstrates some of the range of effects of bias on performance.
 
 ```{r Table of Gender and Attrition}
 kbl(table(Attrition$Attrition, Attrition$Gender),  booktabs = T,
@@ -1374,14 +1398,14 @@ Working <- Attrition %>%
            bias_YesNo(Variable = Attrition,
                        Source_of_bias = as.numeric(Gender),
                        Level_of_bias = 0.0))
-  table(Working$Attrition, Working$BiassedAttrition)
+#  table(Working$Attrition, Working$BiassedAttrition)
 
 # Make test and training datasets
 TRAIN <- Working %>% filter(Training)
 TEST  <- Working %>% filter(!Training)
 ```
 
-```{r Random forest bias Gender check}
+```{r Random forest bias Gender check, results = 'hide'}
 set.seed(5)
 # train a default random forest model on the Training data
 # We have to remove the original Attrition, and the Training variables
@@ -1395,18 +1419,18 @@ attr_rf1 <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-attr_rf1
+#attr_rf1
 
 # get OOB RMSE
-default_rmse <- sqrt(attr_rf1$prediction.error)
+#default_rmse <- sqrt(attr_rf1$prediction.error)
 ## [1] 0.33
 
 #treeInfo(attr_rf1)
-importance(attr_rf1)
+#importance(attr_rf1)
 
 ```
 
-```{r Predict from random forest bias Gender}
+```{r Predict from random forest bias Gender, results = 'hide'}
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
@@ -1420,7 +1444,7 @@ RF_data_test = bind_cols(Attrition = TEST$BiassedAttrition,
                     Prediction = predictions_test[,2])
 ```
 
-```{r Plots from random forest bias Gender, results = 'hide'}
+```{r Plots from random forest bias Gender, results = 'hide', eval = FALSE}
 gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
@@ -1456,7 +1480,7 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation  Gender}
+```{r Function for biassed simulation  Gender, results = 'hide'}
 
 OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
   # number of features
@@ -1526,21 +1550,21 @@ return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
 }
 
 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = Gender,
-         Level_of_bias = 0.0)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Gender,
+#         Level_of_bias = 0.0)
 # AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 # 0.9512131               0.9512131        0.8051510                0.8051510 
           
 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = Gender,
-         Level_of_bias = 0.1)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Gender,
+#         Level_of_bias = 0.1)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 #          0.9387764           0.9309477           0.8013215           0.7457398 
-OneBiassedModel(Data = Attrition,
-         Source_of_bias = Gender,
-         Level_of_bias = 0.2)
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Gender,
+#         Level_of_bias = 0.2)
 #AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 #          0.9333101           0.9365522           0.8024002           0.6653573 
 
@@ -1565,7 +1589,7 @@ D <- do.call(rbind, lapply(ModelBiassedSims_Gender, data.frame)) %>%
   mutate(Set = str_extract(NAME,"\\_(.*?)\\_")) %>%
   mutate(Set = str_replace_all(Set, "\\_", "" )) %>%
   mutate(Type = str_extract(NAME,"[^_]+$")) %>%
-  select(NAME,Error_rate,Set,Type,X1:X100)
+  select(NAME,Error_rate,Set,Type,X1:X1000)
 
 D <- D %>%
   pivot_longer(cols=starts_with('X'),
@@ -1577,22 +1601,271 @@ D <- D %>%
   arrange(Set, Type, Error_rate, Index)
 ```
 
-```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
 ggplot(data <- D,
        aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
            colour = Set, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
-    labs(title = 'Impact of increasing level of bias on training and test datasets',
+    labs(title = 'Impact of increasing level of bias related to Gender on training and test datasets',
          x = "Area under Curve",
          y = "Simulated bias rate in training data") +
     theme_minimal() +
   scale_colour_manual(values=c("red", "black")) +
   scale_fill_manual(values=c("green","white")) +
-    coord_cartesian(xlim = c(0.54,1)) +
+    coord_cartesian(xlim = c(0.64,1)) +
     scale_y_discrete(limits = rev)
 
+ggsave("Images/Bias_Gender.png")
+ggsave("Images/_Gender.pdf")
 ```
+
+## Effect of bias in a higher importance variable DistanceFromHome
+
+Finally an analysis of a high-importance variable, Distance from Home, which has an importance of 28.5, shows a similar pattern. There is an improved fit to the true values of the training data at low levels of bias, but not at high. The test data performance is much worse than that of the training data.
+
+
+```{r Table of Distance from Home and Attrition}
+Attrition$Distance = cut(Attrition$DistanceFromHome, breaks =c(0,5,9,19,41), labels =c(1,2,3,4))
+
+kbl(table(Attrition$Attrition, Attrition$Distance),  booktabs = T,
+    caption = "Attrition rate for the IBM data by Distance from Home to work in miles.",
+    col.names = c('Left IBM?', '< 5', '5 to 9', '9 to 19', '>19')) %>%
+  kable_styling(latex_options = c("repeat_header"))
+
+```    
+
+```{r Setup for Bias Distance}
+set.seed(465465)
+
+# Add bias to Attrition
+Working <- Attrition %>%
+  mutate(BiassedAttrition =
+           bias_YesNo(Variable = Attrition,
+                       Source_of_bias = as.numeric(Distance),
+                       Level_of_bias = 0.0))
+#  table(Working$Attrition, Working$BiassedAttrition)
+
+# Make test and training datasets
+TRAIN <- Working %>% filter(Training)
+TEST  <- Working %>% filter(!Training)
+```
+
+```{r Random forest bias Distance check, results = 'hide'}
+set.seed(5)
+# train a default random forest model on the Training data
+# We have to remove the original Attrition, and the Training variables, as well as the continuous DistanceFromHome variable
+attr_rf1 <- ranger(
+  BiassedAttrition ~ ., 
+  data = TRAIN %>% select(-Attrition, -Training,  -DistanceFromHome), # Remove selected variables
+  num.trees = 1000,
+  mtry = floor(n_features / 3),
+  probability = TRUE,
+  importance = 'impurity',
+  respect.unordered.factors = "order",
+  min.bucket = 10
+)
+#attr_rf1
+
+# get OOB RMSE
+#default_rmse <- sqrt(attr_rf1$prediction.error)
+## [1] 0.33
+
+#treeInfo(attr_rf1)
+#importance(attr_rf1)
+
+```
+
+```{r Predict from random forest bias Distance, results = 'hide'}
+predict_ranger_train <- predict(attr_rf1, TRAIN)
+predict_ranger_test <- predict(attr_rf1, TEST)
+
+predictions_train <- predictions(predict_ranger_train)
+predictions_test <- predictions(predict_ranger_test)
+
+RF_data_train = bind_cols(Attrition = TRAIN$BiassedAttrition,
+                    Prediction = predictions_train[,2])
+
+RF_data_test = bind_cols(Attrition = TEST$BiassedAttrition,
+                    Prediction = predictions_test[,2])
+```
+
+```{r Plots from random forest bias Distance, results = 'hide', eval = FALSE}
+gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
+                         m = Prediction)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+  geom_abline(color='red', slope = 1, intercept = 0)
+
+
+gTree_ranger_test <- ggplot(RF_data_test, aes(d = Attrition,
+                         m = Prediction)) +
+    geom_roc(colour = 'blue', labelsize = 3) +
+  geom_abline(color='red', slope = 1, intercept = 0)
+
+AUC_ranger_train <- calc_auc(gTree_ranger_train)
+AUC_calc(RF_data_train, d = 'Attrition', m = 'Prediction')
+
+AUC_ranger_test <- calc_auc(gTree_ranger_test)
+AUC_calc(RF_data_test, d = 'Attrition', m = 'Prediction')
+
+
+gTree_ranger_train <- gTree_ranger_train +
+    labs(title = 'Random forest - Training data (biassed)',
+         subtitle = paste('Area under curve = ', round(AUC_ranger_train$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+
+gTree_ranger_test <- gTree_ranger_test +
+    labs(title = 'Random forest - Test data (biassed)',
+         subtitle = paste('Area under curve = ', round(AUC_ranger_test$AUC, 2)),
+         x = "False positives",
+         y = "True positives",
+    )
+
+cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
+```
+
+```{r Function for biassed simulation  Distance, results = 'hide'}
+
+OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
+  # number of features
+  n_features <- length(names(Data)) - 2 # Training and Attrition
+
+  Working <- Data %>%
+    mutate(BiassedAttrition =
+           bias_YesNo(Attrition,
+                      Source_of_bias = as.numeric(Distance),
+                      Level_of_bias = Level_of_bias))
+
+  TRAIN <- Working %>% filter(Training)
+  TEST  <- Working %>% filter(!Training)
+
+#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
+#  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
+
+
+# train a default random forest model on the Training data
+attr_rf1 <- ranger(
+  BiassedAttrition ~ ., 
+  data = TRAIN %>% select(-Attrition, -Training, -DistanceFromHome),
+  num.trees = 1000,
+  mtry = floor(n_features / 3),
+  probability=TRUE,
+  importance = 'impurity',
+  respect.unordered.factors = "order",
+  min.bucket = 10
+)
+  predict_ranger_train <- predict(attr_rf1, TRAIN)
+  predict_ranger_test <- predict(attr_rf1, TEST)
+
+  predictions_train <- predictions(predict_ranger_train)
+  predictions_test <- predictions(predict_ranger_test)
+
+  RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
+                    Prediction = predictions_train[,2])
+
+  RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
+                    Prediction = predictions_train[,2])
+
+  RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
+                    Prediction = predictions_test[,2])
+  
+  RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
+                    Prediction = predictions_test[,2])
+
+ # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
+  Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
+                             d = 'Attrition',
+                             m = 'Prediction')
+  Area_under_Curve_train_B <- AUC_calc(RF_data_train_B,
+                             d = 'BiassedAttrition',
+                             m = 'Prediction')
+  Area_under_Curve_test_A   <- AUC_calc(RF_data_test_A,
+                             d = 'Attrition',
+                             m = 'Prediction')
+  Area_under_Curve_test_B   <- AUC_calc(RF_data_test_B,
+                             d = 'BiassedAttrition',
+                             m = 'Prediction')
+#cat(Area_under_Curve,"\n")
+return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
+            AUC_Train_Bias = Area_under_Curve_train_B, 
+            AUC_Test_Attrition  = Area_under_Curve_test_A,
+            AUC_Test_Bias  = Area_under_Curve_test_B
+         ))
+}
+
+
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.0)
+# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+# 0.9512131               0.9512131        0.8051510                0.8051510 
+          
+
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.1)
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9387764           0.9309477           0.8013215           0.7457398 
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.2)
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9333101           0.9365522           0.8024002           0.6653573 
+
+```
+
+```{r Run the biassed simulations  Distance (SLOW)}
+#ModelBiassedSims_Distance <- seq(0,0.15, 0.01) %>%
+#    set_names() %>%
+#     map(~replicate(1000, OneBiassedModel(Data = Attrition,
+#                                         Source_of_bias = Distance,
+#                                          Level_of_bias = .x) ) )
+#
+#readr::write_rds(ModelBiassedSims_Distance, file = "data/ModelBiassedSims_Distance.Rds")
+ModelBiassedSims_Distance <- readr::read_rds(file = "data/ModelBiassedSims_Distance.Rds")
+
+```
+
+```{r Post-process the biassed simulations Distance}
+D <- do.call(rbind, lapply(ModelBiassedSims_Distance, data.frame)) %>%
+  rownames_to_column('NAME') %>%
+  mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
+  mutate(Set = str_extract(NAME,"\\_(.*?)\\_")) %>%
+  mutate(Set = str_replace_all(Set, "\\_", "" )) %>%
+  mutate(Type = str_extract(NAME,"[^_]+$")) %>%
+  select(NAME,Error_rate,Set,Type,X1:X1000)
+
+D <- D %>%
+  pivot_longer(cols=starts_with('X'),
+               names_prefix = 'X',
+               names_transform = as.integer,
+               names_to = 'Index',
+               values_to = 'AUC') %>%
+  mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
+  arrange(Set, Type, Error_rate, Index)
+```
+
+```{r Graph the biassed simulations Distance, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Distance from Home on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+
+ggplot(data <- D,
+       aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
+           colour = Set, fill = Type)) +
+    geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
+    labs(title = 'Impact of increasing level of bias related to Distance from Home on training and test datasets',
+         x = "Area under Curve",
+         y = "Simulated bias rate in training data") +
+    theme_minimal() +
+  scale_colour_manual(values=c("red", "black")) +
+  scale_fill_manual(values=c("green","white")) +
+    coord_cartesian(xlim = c(0.64,1)) +
+    scale_y_discrete(limits = rev)
+
+ggsave("Images/Bias_Distance_from_home.png")
+ggsave("Images/Bias_Distance_from_home.pdf")
+```
+
 
 For the test data, the prediction of the 'true' Attrition based on biassed data is substantially worse, while for the biassed test data, there is little difference in the median estimate. Indeed, the overall effect of using biassed data for training is close to undetectable in both of the biassed test data sets, suggesting that the Random forest fits the bias well.
 
