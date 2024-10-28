@@ -138,7 +138,11 @@ kbl(table(Attrition$Attrition, Attrition$Training),  booktabs = T,
 #  TRAIN <- training(Attrition_split)
 ```
 
-Given these data, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are quite a few tools for this, and we use the rpart package from R. This starts with every variable in the data set, and produces a tree, as shown.
+## Classification and Regression Tree (CART)
+
+CAR trees are a flexible and powerful tool for data analysis, which also allow for a useful visualisation of the resulting model @breimanClassificationRegressionTrees1984. In brief, the tree starts with all the data, and then cascades down through a series of choices, based on the values of variables in the data, to a final predicted classification of the data presented.
+
+Given the data here, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are many tools for this, but we use the rpart package from R @therneauRpartRecursivePartitioning2023. This starts with every variable in the data set, and produces a tree, as shown.
 
 ```{r rpart Create three trees}
 Tree_0.01 <- rpart::rpart(Attrition ~., data = training(Attrition_split))
@@ -206,9 +210,11 @@ The point is that a very minor change in one parameter, can produce a very diffe
 
 ## Performance of CAR Tree models
 
-There are several different ways to examine the performance of a classification model. Which one to use, depends mainly on the goals of the modelling exercise, and specifically on the costs of misclassification. One popular choice is a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss, that is a random classification, for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
+There are several different ways to examine the performance of a classification model. Which one to use, depends mainly on the goals of the modelling exercise, and specifically on the costs of misclassification.
 
-These graphs, which are known as Receiver Operating Characteristics (ROC) curves (Peterson et al. 1954), show the meaning of the term 'Area under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
+One popular choice is a measure called the 'Area Under the Curve (AUC)'. This is useful when there is no difference between the cost of falsely identifying a person, as a member of a class, (a false positive), and falsely rejecting a person, who is actually a member of a class (a false negative). This value is compared with 0.5, which is the result of a coin toss, that is a random classification, for two classes, and 1.0, which is a perfect classification, which makes no mistakes.
+
+These graphs, which are known as Receiver Operating Characteristics (ROC) curves @petersonTheorySignalDetectability1954 show the meaning of the term 'Area under the curve'. The thin diagonal line is the performance of a random classifier, equivalent to tossing a coin to classify each person. The gap between the thicker line, and the diagonal is how much better the CART tree does at classification than random chance. The area under the curve is a number measuring this performance.
 
 ```{r Performance of CART model - TRAINING}
 Tree_Prediction_0.01a <- ROCR::prediction(
@@ -373,7 +379,7 @@ rm(DATA_test, DATA_train)
 rm(rpartPlot_0.02, TABLE1)
 ```
 
-While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example .... However, for this analysis, following these important ideas further would distract from the focus on the social implications of the use of the Home Office model. 
+While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, more careful variabel selection, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example @jamesIntroductionStatisticalLearning2021. However, for this analysis, following these important ideas further would distract from the focus on the social implications of the use of the Home Office model. 
 
 # From a tree to a forest
 
@@ -902,11 +908,11 @@ The AUC is calculated for each RF for each of four sets of data -
 3.  The original test data              Test/Attrition
 4.  The randomly altered test data      Test/Noisy
 
-First, this show the enormous difference between the results on training data and test data, with no overlap between the prediction for the test and training data. The test data, of course, represents something like the real world performance. This is true for all error rates,including zero-error.
+First, this shows the enormous difference between the results on training data and test data, with no overlap between the prediction for the test and training data. The test data, of course, represents something like the real world performance. This is true for all error rates,including zero-error.
 
-As the error rate increase, the prediction of the training data, trained on the noisy data hardly shifts at all. By comparison the prediction of the true data from the noisy data gets a bit worse for the training sample.
+As the error rate increases, the prediction of the training data, trained on the noisy data hardly shifts at all. By comparison the prediction of the true data from the noisy data gets a bit worse for the training sample.
 
-For the test data, the overall prediction level is poor, but the gap between the predictions for noisy data and the predictions of the truth rises very steeply as the error rate increases. It also becomes much more variable (represented by the width of each boxplot) as the level of noise increases.
+For the test data, the overall prediction level is poor, but the gap between the predictions for noisy data, which is what will be observed in practice life, and the predictions of the true data rises very steeply as the error rate increases. It also becomes much more variable (represented by the width of each boxplot) as the level of noise increases. Notably the true test data is better predicted by the model, as the level of noise rises, than the observed test data.
 
 # Bias
 
@@ -918,7 +924,9 @@ This is acknowledged by the Home Office AQA review which lists as one of the mod
 
 ## Effect of bias due to a moderate importance variable EnvironmentSatisfaction  
 
-In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition. To illustrate the impact of bias we shift the values of attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section.
+In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition.
+
+To illustrate the impact of bias we shift the values of Attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section. The higher the level of EnvironmentSatisfaction, the more likely it is that the Attrition will be (falsely) set to 'Yes'.
 
 ```{r Scaling functions, results = 'hide'}
 
@@ -1362,7 +1370,7 @@ ggplot(data <- D,
     theme_minimal() +
   scale_colour_manual(values=c("red", "black")) +
   scale_fill_manual(values=c("green","white")) +
-    coord_cartesian(xlim = c(0.54,1)) +
+    coord_cartesian(xlim = c(0.64,1)) +
     scale_y_discrete(limits = rev)
 
 ggsave("Images/Bias_EnvironmentSatisfaction.png")
@@ -1373,13 +1381,15 @@ The overall pattern here is similar to that in the previous graph of the effects
 
 However, the variability in estimates is not as high when bias is added to the data, as when random noise is added to the data. This is because the bias only goes one way, with certain people more likely to be misclassified as at risk of 'Attrition', when in fact they are not. Real bias can be far more complicated than that modelled here.
 
-The impact of increasing bias is a little different on the training data, and the testing data. In both case, the estimates increase in variability, however, for the training data, the AUC is slightly better for the 'true' Attrition prediction than for the biassed prediction. This is likely because the addition of bias based on of a variable which is part of the model reduces the correlation of that variable with others, and hence of trees containing that variable, and so improves fit.
+The impact of increasing bias is a little different on the training data, and the testing data. In both cases, the estimates increase in variability, however, for the training data, the AUC is slightly better for the 'true' Attrition prediction than for the biassed prediction. This is likely because the addition of bias based on of a variable which is part of the model reduces the correlation of that variable with others, and hence of trees containing that variable, and so improves fit. Again the true values for the test data are better predicted than the observed values.
+
+### Other examples of bias
 
 It is of interest to examine both variables which make little contribution to the random forest, and those which make much larger contributions, as measured by the model-based importance. Two further potential sources of bias, the relatively unimportant (in these models) Gender variable, and the considerably more important Distance from Home variable, are modelled to see if the pattern of behaviour is similar.
 
 ## Effect of bias of a low importance variable - Gender
 
-A similar analysis for the variable Gender, which is one of the lowest importance variable in the whole data set (model-based importance of 0.3) confirms this hypothesis, and demonstrates some of the range of effects of bias on performance.
+A similar analysis for the variable Gender, which is one of the lowest importance variables in the whole data set (model-based importance of 0.3) confirms this hypothesis, and demonstrates similar effects of bias on performance.
 
 ```{r Table of Gender and Attrition}
 kbl(table(Attrition$Attrition, Attrition$Gender),  booktabs = T,
@@ -1866,7 +1876,13 @@ ggsave("Images/Bias_Distance_from_home.png")
 ggsave("Images/Bias_Distance_from_home.pdf")
 ```
 
-
 For the test data, the prediction of the 'true' Attrition based on biassed data is substantially worse, while for the biassed test data, there is little difference in the median estimate. Indeed, the overall effect of using biassed data for training is close to undetectable in both of the biassed test data sets, suggesting that the Random forest fits the bias well.
 
 # Conclusions
+
+The implications of these results are concerning. It is unlikely that most of the users of such systems will have any very sophisticated understanding of the underpinnings of the system. These systems are severely affected by noise or bias in the training data, and while it is certainly possible to improve the fit on test data, compared with the models shown here, there are still significant limits.
+
+The Home Office model, specifically, is not available for independent external scrutiny, and it has not been shown to be fit for purpose. Indeed the main stated justification for introducing the model is to reduce the number of staff investigating claims of sham marriage, not in itself a compelling rationale. There is a real risk that this model, and others like it reflect mostly our own poor practices back to us, and encourage us, under a veneer of statistical merit, to continue with them.
+
+# References
+
