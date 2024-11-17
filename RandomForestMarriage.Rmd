@@ -2,6 +2,7 @@
 title: "Random Forest"
 author: "Anthony Staines"
 date: "`r Sys.Date()`"
+bibliography: "RandomForestMarriage.bib"
 output:
   pdf_document: default
   word_document: default
@@ -39,7 +40,7 @@ set.seed(979)
 
 ```
 
-# Introduction - why examine Random Forest models in particular?
+# Introduction - why examine Random FCould not export bibliography: no selectionorest models in particular?
 
 There are numerous models used in machine learning, some complex beyond any explanation we can provide - for example the large language models at the foundation of many commercial AI projects, but some are simpler, and more open to explanation. To examine the behaviour, and some of the limitations in real use, of machine learning, these simpler models are preferable.
 
@@ -1147,6 +1148,102 @@ table(DATA$Variable, DATA$Bias_1.0, DATA$Source)
 rm(DATA)
 ```
 
+```{r Function for biassed simulation  Distance, results = 'hide'}
+
+OneBiassedModel <- function(Data, Outcome, Source_of_bias, Level_of_bias = 0.1){
+  # number of features
+  n_features <- length(names(Data)) - 2 # Training and Attrition
+
+  Working <- Data %>%
+    mutate(BiassedAttrition =
+           bias_YesNo({{ Outcome }},
+                      Source_of_bias = as.numeric({{ Source_of_bias }}),
+                      Level_of_bias = Level_of_bias))
+
+  TRAIN <- Working %>% filter(Training)
+#  cat(names(TRAIN),"\n")
+  TEST  <- Working %>% filter(!Training)
+
+#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
+#  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
+
+# train a default random forest model on the Training data
+attr_rf1 <- ranger(
+  BiassedAttrition ~ ., 
+  data = TRAIN  %>% select(-{{ Outcome }}, -{{ Source_of_bias }}, -Training), 
+  num.trees = 1000,
+  mtry = floor(n_features / 3),
+  probability=TRUE,
+  importance = 'impurity',
+  respect.unordered.factors = "order",
+  min.bucket = 10
+)
+  predict_ranger_train <- predict(attr_rf1, TRAIN)
+  predict_ranger_test <- predict(attr_rf1, TEST)
+
+  predictions_train <- predictions(predict_ranger_train)
+  predictions_test <- predictions(predict_ranger_test)
+
+  RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
+                    Prediction = predictions_train[,2])
+
+  RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
+                    Prediction = predictions_train[,2])
+
+  RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
+                    Prediction = predictions_test[,2])
+  
+  RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
+                    Prediction = predictions_test[,2])
+
+ # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
+  Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
+                             d = 'Attrition',
+                             m = 'Prediction')
+  Area_under_Curve_train_B <- AUC_calc(RF_data_train_B,
+                             d = 'BiassedAttrition',
+                             m = 'Prediction')
+  Area_under_Curve_test_A   <- AUC_calc(RF_data_test_A,
+                             d = 'Attrition',
+                             m = 'Prediction')
+  Area_under_Curve_test_B   <- AUC_calc(RF_data_test_B,
+                             d = 'BiassedAttrition',
+                             m = 'Prediction')
+#cat(Area_under_Curve,"\n")
+return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
+            AUC_Train_Bias = Area_under_Curve_train_B, 
+            AUC_Test_Attrition  = Area_under_Curve_test_A,
+            AUC_Test_Bias  = Area_under_Curve_test_B
+         ))
+}
+
+
+OneBiassedModel(Data = Attrition, Outcome = Attrition,
+         Source_of_bias = DistanceFromHome,
+         Level_of_bias = 0.1)
+
+
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.0)
+# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+# 0.9512131               0.9512131        0.8051510                0.8051510 
+          
+
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.1)
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9387764           0.9309477           0.8013215           0.7457398 
+#OneBiassedModel(Data = Attrition,
+#         Source_of_bias = Distance,
+#         Level_of_bias = 0.2)
+#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
+#          0.9333101           0.9365522           0.8024002           0.6653573 
+
+```
+
+
 ```{r Setup for Bias EnvironmentSatisfaction}
 set.seed(465465)
 
@@ -1238,101 +1335,13 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation EnvironmentSatisfaction, results = 'hide'}
-
-OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
-  # number of features
-  n_features <- length(names(Data)) - 2 # Training and Attrition
-
-  Working <- Data %>%
-    mutate(BiassedAttrition =
-           bias_YesNo(Attrition,
-                      Source_of_bias = as.numeric(EnvironmentSatisfaction),
-                      Level_of_bias = Level_of_bias))
-
-  TRAIN <- Working %>% filter(Training)
-  TEST  <- Working %>% filter(!Training)
-
-#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
-#  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
-
-
-# train a default random forest model on the Training data
-attr_rf1 <- ranger(
-  BiassedAttrition ~ ., 
-  data = TRAIN %>% select(-Attrition, -Training),
-  num.trees = 1000,
-  mtry = floor(n_features / 3),
-  probability=TRUE,
-  importance = 'impurity',
-  respect.unordered.factors = "order",
-  min.bucket = 10
-)
-  predict_ranger_train <- predict(attr_rf1, TRAIN)
-  predict_ranger_test <- predict(attr_rf1, TEST)
-
-  predictions_train <- predictions(predict_ranger_train)
-  predictions_test <- predictions(predict_ranger_test)
-
-  RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
-                    Prediction = predictions_test[,2])
-  
-  RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
-                    Prediction = predictions_test[,2])
-
- # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
-  Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_train_B <- AUC_calc(RF_data_train_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_A   <- AUC_calc(RF_data_test_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_B   <- AUC_calc(RF_data_test_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-#cat(Area_under_Curve,"\n")
-return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
-            AUC_Train_Bias = Area_under_Curve_train_B, 
-            AUC_Test_Attrition  = Area_under_Curve_test_A,
-            AUC_Test_Bias  = Area_under_Curve_test_B
-         ))
-}
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = EnvironmentSatisfaction,
-#         Level_of_bias = 0.0)
-# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-# 0.9512131               0.9512131        0.8051510                0.8051510 
-          
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = EnvironmentSatisfaction,
-#         Level_of_bias = 0.1)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9387764           0.9309477           0.8013215           0.7457398 
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = EnvironmentSatisfaction,
-#         Level_of_bias = 0.2)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9333101           0.9365522           0.8024002           0.6653573 
-
-```
-
 ```{r Run the biassed simulations EnvironmentSatisfaction (SLOW)}
 #ModelBiassedSims <- seq(0,0.15, 0.01) %>%
 #     set_names() %>%
 #     map(~replicate(1000, OneBiassedModel(Data = Attrition,
-#                                          Source_of_bias = EnvironmentSatisfaction,
-#                                          Level_of_bias = .x) ) )
+#                                           Outcome = Attrition,
+#                                           Source_of_bias = EnvironmentSatisfaction,
+#                                           Level_of_bias = .x) ) )
 #
 #readr::write_rds(ModelBiassedSims, file = "data/ModelBiassedSims.Rds")
 ModelBiassedSims <- readr::read_rds(file = "data/ModelBiassedSims.Rds")
@@ -1490,102 +1499,13 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation  Gender, results = 'hide'}
-
-OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
-  # number of features
-  n_features <- length(names(Data)) - 2 # Training and Attrition
-
-  Working <- Data %>%
-    mutate(BiassedAttrition =
-           bias_YesNo(Attrition,
-                      Source_of_bias = as.numeric(Gender),
-                      Level_of_bias = Level_of_bias))
-
-  TRAIN <- Working %>% filter(Training)
-  TEST  <- Working %>% filter(!Training)
-
-#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
-#  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
-
-
-# train a default random forest model on the Training data
-attr_rf1 <- ranger(
-  BiassedAttrition ~ ., 
-  data = TRAIN %>% select(-Attrition, -Training),
-  num.trees = 1000,
-  mtry = floor(n_features / 3),
-  probability=TRUE,
-  importance = 'impurity',
-  respect.unordered.factors = "order",
-  min.bucket = 10
-)
-  predict_ranger_train <- predict(attr_rf1, TRAIN)
-  predict_ranger_test <- predict(attr_rf1, TEST)
-
-  predictions_train <- predictions(predict_ranger_train)
-  predictions_test <- predictions(predict_ranger_test)
-
-  RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
-                    Prediction = predictions_test[,2])
-  
-  RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
-                    Prediction = predictions_test[,2])
-
- # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
-  Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_train_B <- AUC_calc(RF_data_train_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_A   <- AUC_calc(RF_data_test_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_B   <- AUC_calc(RF_data_test_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-#cat(Area_under_Curve,"\n")
-return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
-            AUC_Train_Bias = Area_under_Curve_train_B, 
-            AUC_Test_Attrition  = Area_under_Curve_test_A,
-            AUC_Test_Bias  = Area_under_Curve_test_B
-         ))
-}
-
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Gender,
-#         Level_of_bias = 0.0)
-# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-# 0.9512131               0.9512131        0.8051510                0.8051510 
-          
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Gender,
-#         Level_of_bias = 0.1)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9387764           0.9309477           0.8013215           0.7457398 
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Gender,
-#         Level_of_bias = 0.2)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9333101           0.9365522           0.8024002           0.6653573 
-
-```
-
 ```{r Run the biassed simulations  Gender (SLOW)}
 #ModelBiassedSims_Gender <- seq(0,0.15, 0.01) %>%
 #    set_names() %>%
 #     map(~replicate(1000, OneBiassedModel(Data = Attrition,
+#                                           Outcome = Attrition,
 #                                         Source_of_bias = Gender,
-#                                          Level_of_bias = .x) ) #)
+#                                          Level_of_bias = .x) ) )
 #
 #readr::write_rds(ModelBiassedSims_Gender, file = "data/ModelBiassedSims_Gender.Rds")
 ModelBiassedSims_Gender <- readr::read_rds(file = "data/ModelBiassedSims_Gender.Rds")
@@ -1736,100 +1656,11 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation  Distance, results = 'hide'}
-
-OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
-  # number of features
-  n_features <- length(names(Data)) - 2 # Training and Attrition
-
-  Working <- Data %>%
-    mutate(BiassedAttrition =
-           bias_YesNo(Attrition,
-                      Source_of_bias = as.numeric(Distance),
-                      Level_of_bias = Level_of_bias))
-
-  TRAIN <- Working %>% filter(Training)
-  TEST  <- Working %>% filter(!Training)
-
-#  cat('TABLE \n',table(TRAIN$Attrition, TRAIN$BiassedAttrition),'\n')
-#  cat('TABLE \n',table(TEST$Attrition, TEST$BiassedAttrition),'\n')
-
-
-# train a default random forest model on the Training data
-attr_rf1 <- ranger(
-  BiassedAttrition ~ ., 
-  data = TRAIN %>% select(-Attrition, -Training, -DistanceFromHome),
-  num.trees = 1000,
-  mtry = floor(n_features / 3),
-  probability=TRUE,
-  importance = 'impurity',
-  respect.unordered.factors = "order",
-  min.bucket = 10
-)
-  predict_ranger_train <- predict(attr_rf1, TRAIN)
-  predict_ranger_test <- predict(attr_rf1, TEST)
-
-  predictions_train <- predictions(predict_ranger_train)
-  predictions_test <- predictions(predict_ranger_test)
-
-  RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
-                    Prediction = predictions_train[,2])
-
-  RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
-                    Prediction = predictions_test[,2])
-  
-  RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
-                    Prediction = predictions_test[,2])
-
- # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
-  Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_train_B <- AUC_calc(RF_data_train_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_A   <- AUC_calc(RF_data_test_A,
-                             d = 'Attrition',
-                             m = 'Prediction')
-  Area_under_Curve_test_B   <- AUC_calc(RF_data_test_B,
-                             d = 'BiassedAttrition',
-                             m = 'Prediction')
-#cat(Area_under_Curve,"\n")
-return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
-            AUC_Train_Bias = Area_under_Curve_train_B, 
-            AUC_Test_Attrition  = Area_under_Curve_test_A,
-            AUC_Test_Bias  = Area_under_Curve_test_B
-         ))
-}
-
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Distance,
-#         Level_of_bias = 0.0)
-# AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-# 0.9512131               0.9512131        0.8051510                0.8051510 
-          
-
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Distance,
-#         Level_of_bias = 0.1)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9387764           0.9309477           0.8013215           0.7457398 
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Distance,
-#         Level_of_bias = 0.2)
-#AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
-#          0.9333101           0.9365522           0.8024002           0.6653573 
-
-```
-
 ```{r Run the biassed simulations  Distance (SLOW)}
 #ModelBiassedSims_Distance <- seq(0,0.15, 0.01) %>%
 #    set_names() %>%
-#     map(~replicate(1000, OneBiassedModel(Data = Attrition,
+#     map(~replicate(1000, OneBiassedModel(Data = #Attrition,
+#                                           Outcome = Attrition,
 #                                         Source_of_bias = Distance,
 #                                          Level_of_bias = .x) ) )
 #
