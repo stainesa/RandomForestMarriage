@@ -34,9 +34,12 @@ knitr::opts_chunk$set(echo = FALSE, cache = TRUE,
                       warning = NA, message = NA,
                       fig.pos = 'H',
                       cache.extra = knitr::rand_seed)
+N = 16
+options(Ncpus = N)
+options(ranger.num.threads = N)
 
 set.seed(979)
-
+rm(N)
 ```
 
 # Introduction - why examine Random Forest models in particular?
@@ -86,7 +89,7 @@ kbl(table(Attrition$Attrition),  booktabs = T, caption = "Overall rate of attrit
   kable_styling(latex_options = c("repeat_header"))
 ```
 
-Most people stayed in work, but just under 1 in 5 left. Note that this represents the actual attrition - these are staff who left employment. Were Attrition to be interpreted as being a measure of the risk for leaving, model interpretation would become more challenging, and this will be discussed further below.
+Most people stayed in work, but just under 1 in 5 left. Note that this represents the actual attrition - these are staff who left employment. Were Attrition to be interpreted as being a measure of the risk for leaving, rather than the observed fact of leaving, model interpretation would become more challenging, and this will be discussed further below.
 
 There are almost 1,500 people in these data, and these can conveniently be divided into a training set, which is used to develop a model, and a test set, which is used to see how well the model performs on new data. In most applications of machine learning, the latter is the key question. We divide the data with 3 in 4 going to the training set, and 1 in 4 going to the test set, while ensuring that this selection is done within the two values of Attrition, so that there are the same proportion of leavers and non-leavers in both groups.
 
@@ -142,7 +145,7 @@ kbl(table(Attrition$Attrition, Attrition$Training),  booktabs = T,
 
 CAR trees are a flexible and powerful tool for data analysis, which also allow for a useful visualisation of the resulting model @breimanClassificationRegressionTrees1984. In brief, the tree starts with all the data, and then cascades down through a series of choices, based on the values of variables in the data, to a final predicted classification of the data presented.
 
-Given the data here, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are many tools for this, but we use the rpart package from R @therneauRpartRecursivePartitioning2023. This starts with every variable in the data set, and produces a tree, as shown.
+Given the data here, the aim of a CART is to fit a model that best predicts the observed attrition from the data recorded. There are many tools for this, but here we use the rpart package from R @therneauRpartRecursivePartitioning2023. This starts with every variable in the data set, and produces a tree, as shown.
 
 ```{r rpart Create three trees}
 Tree_0.01 <- rpart::rpart(Attrition ~., data = training(Attrition_split))
@@ -379,7 +382,7 @@ rm(DATA_test, DATA_train)
 rm(rpartPlot_0.02, TABLE1)
 ```
 
-While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, more careful variabel selection, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example @jamesIntroductionStatisticalLearning2021. However, for this analysis, following these important ideas further would distract from the focus on the social implications of the use of the Home Office model. 
+While the full model does much better on the training data than the simpler models, on the test data its performance is no better, and none of these classifiers would be regarded as very effective in practice. There are a number of ways to improve the performance of these trees, notably cross-validation, more careful variable selection, and a range of methods for improving balance. Any introduction to machine learning would cover these extensively, for example @jamesIntroductionStatisticalLearning2021. However, for this analysis, following these important ideas further would distract from the focus on the social implications of the use of the Home Office model. 
 
 # From a tree to a forest
 
@@ -714,7 +717,7 @@ attr_rf1 <- ranger(
 
 ```
 
-```{r Predict from Noisy random forest, results = 'hide'}
+```{r Predict from noisy random forest, results = 'hide'}
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
@@ -926,7 +929,7 @@ This is acknowledged by the Home Office AQA review which lists as one of the mod
 
 In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition.
 
-To illustrate the impact of bias we shift the values of Attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section. The higher the level of EnvironmentSatisfaction, the more likely it is that the Attrition will be (falsely) set to 'Yes'.
+To illustrate the impact of bias we shift the values of Attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section. The higher the level of EnvironmentSatisfaction, and the higher the scale of bias, the more likely it is that the Attrition will be (falsely) set to 'Yes'.
 
 ```{r Scaling functions, results = 'hide'}
 
@@ -971,7 +974,7 @@ ScaledVariable <-
 
 ```{r bias_YesNo, results = 'hide'}
 ################################################
-# Switches a proportion of 1/0 values to 0/1
+# Switches a proportion of 1/0 values from 0 to 1
 #  depending on the value of another variable, and a parameter called Level_of_bias
 #  
 bias_YesNo <- function(Variable, Source_of_bias, Level_of_bias = 0.0) {
@@ -1155,7 +1158,7 @@ Working <- Attrition %>%
   mutate(BiassedAttrition =
            bias_YesNo(Variable = Attrition,
                        Source_of_bias = as.numeric(EnvironmentSatisfaction),
-                       Level_of_bias = 0.0))
+                       Level_of_bias = 0.1))
 #  table(Working$Attrition, Working$BiassedAttrition)
 
 # Make test and training datasets
@@ -1177,7 +1180,7 @@ attr_rf1 <- ranger(
   respect.unordered.factors = "order",
   min.bucket = 10
 )
-#attr_rf1
+attr_rf1
 
 # get OOB RMSE
 #default_rmse <- sqrt(attr_rf1$prediction.error)
@@ -1192,33 +1195,39 @@ attr_rf1 <- ranger(
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
-predictions_train <- predictions(predict_ranger_train)
+predictions_train <- predictions(predict_ranger_train) 
 predictions_test <- predictions(predict_ranger_test)
 
-RF_data_train = bind_cols(Attrition = TRAIN$BiassedAttrition,
-                    Prediction = predictions_train[,2])
+RF_data_train = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
+                    Prediction = predictions_train[,2]) %>%
+  bind_cols(BIAS = TRAIN$EnvironmentSatisfaction,
+            Attrition = TRAIN$Attrition) %>%
+  mutate(Correct = ifelse(BiassedAttrition == Attrition, 1, 0))
 
-RF_data_test = bind_cols(Attrition = TEST$BiassedAttrition,
-                    Prediction = predictions_test[,2])
+RF_data_test = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
+                    Prediction = predictions_test[,2]) %>%
+  bind_cols(BIAS = TEST$EnvironmentSatisfaction,
+            Attrition = TEST$Attrition) %>%
+  mutate(Correct = ifelse(BiassedAttrition == Attrition, 1, 0))
 ```
 
 ```{r Plots from random forest bias EnvironmentSatisfaction, results = 'hide', eval=FALSE}
-gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
+gTree_ranger_train <- ggplot(RF_data_train, aes(d = BiassedAttrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
   geom_abline(color='red', slope = 1, intercept = 0)
 
 
-gTree_ranger_test <- ggplot(RF_data_test, aes(d = Attrition,
+gTree_ranger_test <- ggplot(RF_data_test, aes(d = BiassedAttrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
   geom_abline(color='red', slope = 1, intercept = 0)
 
 AUC_ranger_train <- calc_auc(gTree_ranger_train)
-AUC_calc(RF_data_train, d = 'Attrition', m = 'Prediction')
+AUC_calc(RF_data_train, d = 'BiassedAttrition', m = 'Prediction')
 
 AUC_ranger_test <- calc_auc(gTree_ranger_test)
-AUC_calc(RF_data_test, d = 'Attrition', m = 'Prediction')
+AUC_calc(RF_data_test, d = 'BiassedAttrition', m = 'Prediction')
 
 
 gTree_ranger_train <- gTree_ranger_train +
@@ -1236,6 +1245,14 @@ gTree_ranger_test <- gTree_ranger_test +
     )
 
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
+```
+
+```{r Table for impact of bias, results = 'hide'}
+TRAIN %>% count(Attrition, EnvironmentSatisfaction, .drop=FALSE) %>% group_by(Attrition) %>% mutate(prop = prop.table(n)) %>% filter(Attrition == 'Yes')
+TRAIN %>% count(BiassedAttrition, EnvironmentSatisfaction, .drop=FALSE) %>% group_by(BiassedAttrition) %>% mutate(prop = prop.table(n)) %>% filter(BiassedAttrition == 'Yes')
+TEST  %>% count(Attrition, EnvironmentSatisfaction, .drop=FALSE) %>% group_by(Attrition) %>% mutate(prop = prop.table(n)) %>% filter(Attrition == 'Yes')
+TEST  %>% count(BiassedAttrition, EnvironmentSatisfaction, .drop=FALSE) %>% group_by(BiassedAttrition) %>% mutate(prop = prop.table(n)) %>% filter(BiassedAttrition == 'Yes')
+
 ```
 
 ```{r Function for biassed simulation EnvironmentSatisfaction, results = 'hide'}
@@ -1300,6 +1317,11 @@ attr_rf1 <- ranger(
                              d = 'BiassedAttrition',
                              m = 'Prediction')
 #cat(Area_under_Curve,"\n")
+#
+
+
+
+  
 return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
             AUC_Train_Bias = Area_under_Curve_train_B, 
             AUC_Test_Attrition  = Area_under_Curve_test_A,
