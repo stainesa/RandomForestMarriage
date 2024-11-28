@@ -1905,6 +1905,7 @@ The Home Office model, specifically, is not available for independent external s
 
 # References
 
+#Testing
 #########################################################################
 ## TESTING
 #########################################################################
@@ -1952,7 +1953,7 @@ importance(attr_rf1)
 
 ```
 
-```{r Predict from random forest bias Gender, results = 'hide'}
+```{r Predict from random forest bias Gender_TEST, results = 'hide'}
 predict_ranger_train <- predict(attr_rf1, TRAIN)
 predict_ranger_test <- predict(attr_rf1, TEST)
 
@@ -1968,29 +1969,54 @@ RF_data_test = bind_cols(True_Attrition = TEST$Attrition,
                          Bias_Attrition = TEST$BiassedAttrition,
                     Prediction = predictions_test[,2],
                     Source = TEST$Gender)
-
+## Sample tables
 RF_data_train  %>% group_by(Source, Bias_Attrition) %>% summarise(N = n(), Mean = mean(Prediction, na.rm = TRUE)) %>% ungroup() %>% mutate(Proportion = N/(sum(N)))
 RF_data_test  %>% group_by(Source, True_Attrition, Bias_Attrition) %>% summarise(N = n(), Mean = mean(Prediction, na.rm = TRUE))
+RF_data_test  %>% group_by(Source, Bias_Attrition) %>% summarise(N = n(), Mean = mean(Prediction, na.rm = TRUE))
+RF_data_test  %>% group_by(Bias_Attrition) %>% summarise(N = n(), Mean = mean(Prediction, na.rm = TRUE))
+RF_data_test  %>% group_by(Source) %>% summarise(N = n(), Mean = mean(Prediction, na.rm = TRUE))
 
+
+## What we want (per simulation)
+## For each level in Source_of_Bias
+##    (compared with the first level)
+## The ratio of Yes to the total
+## 
+# This is how we get it
+T1 <- RF_data_test  %>%
+  group_by(Source, Bias_Attrition) %>%
+  summarise(N = n()) %>% # Totals by gender and Bias_Attrition
+  full_join(RF_data_test %>%
+              group_by(Source) %>%
+              summarise(Total = n()), # Totals by gender only
+            by = 'Source') %>% # Fuul join
+  ungroup() %>%
+  filter(Bias_Attrition == 'Yes') %>% # Lose the non-leavers
+  mutate(Proportion = N/Total) %>%
+  mutate(RR = Proportion/Proportion[[1]]) # Two steps to RR
+RRResult = as.numeric(T1$RR)
+names(RRResult) = T1$Source
+str(RRResult)
+str(as.list(RRResult))
 ```
 
-```{r Plots from random forest bias Gender, results = 'hide', eval = FALSE}
-gTree_ranger_train <- ggplot(RF_data_train, aes(d = Attrition,
+```{r Plots from random forest bias Gender_TEST, results = 'hide', eval = FALSE}
+gTree_ranger_train <- ggplot(RF_data_train, aes(d = Bias_Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
   geom_abline(color='red', slope = 1, intercept = 0)
 
 
-gTree_ranger_test <- ggplot(RF_data_test, aes(d = Attrition,
+gTree_ranger_test <- ggplot(RF_data_test, aes(d = Bias_Attrition,
                          m = Prediction)) +
     geom_roc(colour = 'blue', labelsize = 3) +
   geom_abline(color='red', slope = 1, intercept = 0)
 
 AUC_ranger_train <- calc_auc(gTree_ranger_train)
-AUC_calc(RF_data_train, d = 'Attrition', m = 'Prediction')
+AUC_calc(RF_data_train, d = 'Bias_Attrition', m = 'Prediction')
 
 AUC_ranger_test <- calc_auc(gTree_ranger_test)
-AUC_calc(RF_data_test, d = 'Attrition', m = 'Prediction')
+AUC_calc(RF_data_test, d = 'Bias_Attrition', m = 'Prediction')
 
 
 gTree_ranger_train <- gTree_ranger_train +
@@ -2010,17 +2036,19 @@ gTree_ranger_test <- gTree_ranger_test +
 cowplot::plot_grid(nrow = 2, gTree_ranger_train, gTree_ranger_test)
 ```
 
-```{r Function for biassed simulation  Gender, results = 'hide'}
+```{r Function for biassed simulation  Gender_TEST, results = 'hide'}
 
 OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
   # number of features
   n_features <- length(names(Data)) - 2 # Training and Attrition
-
+dplyr.summarise.inform <- FALSE
   Working <- Data %>%
     mutate(BiassedAttrition =
            bias_YesNo(Attrition,
-                      Source_of_bias = as.numeric(Gender),
-                      Level_of_bias = Level_of_bias))
+                      Source_of_bias = as.numeric(Source_of_bias),
+                      Level_of_bias = Level_of_bias)) %>%
+    mutate(Source_of_bias = Source_of_bias) %>%
+    mutate(Level_of_bias = Level_of_bias)
 
   TRAIN <- Working %>% filter(Training)
   TEST  <- Working %>% filter(!Training)
@@ -2032,7 +2060,7 @@ OneBiassedModel <- function(Data, Source_of_bias, Level_of_bias = 0.1){
 # train a default random forest model on the Training data
 attr_rf1 <- ranger(
   BiassedAttrition ~ ., 
-  data = TRAIN %>% select(-Attrition, -Training),
+  data = TRAIN %>% select(-Attrition, -Training, -Source_of_bias, -Level_of_bias),
   num.trees = 1000,
   mtry = floor(n_features / 3),
   probability=TRUE,
@@ -2048,21 +2076,23 @@ attr_rf1 <- ranger(
 
   RF_data_train_A = bind_cols(Attrition = TRAIN$Attrition,
                     Prediction = predictions_train[,2],
-                    Gender = TRAIN$Gender)
+                    Source_of_bias = TRAIN$Source_of_bias)
 
   RF_data_train_B = bind_cols(BiassedAttrition = TRAIN$BiassedAttrition,
                     Prediction = predictions_train[,2],
-                    Gender = TRAIN$Gender)
+                    Source_of_bias = TRAIN$Source_of_bias)
 
   RF_data_test_A = bind_cols(Attrition = TEST$Attrition,
                     Prediction = predictions_test[,2],
-                    Gender = TEST$Gender)
+                    Source_of_bias = TEST$Source_of_bias)
   
   RF_data_test_B = bind_cols(BiassedAttrition = TEST$BiassedAttrition,
                     Prediction = predictions_test[,2],
-                    Gender = TEST$Gender)
+                    Source_of_bias = TEST$Source_of_bias)
 
+ # cat('str(RF_data_test_B ', str(RF_data_test_B), ' /n')
  # plot(pROC::roc(RF_data$BiassedAttrition, RF_data$Prediction))
+
   Area_under_Curve_train_A <- AUC_calc(RF_data_train_A,
                              d = 'Attrition',
                              m = 'Prediction')
@@ -2076,17 +2106,34 @@ attr_rf1 <- ranger(
                              d = 'BiassedAttrition',
                              m = 'Prediction')
 #cat(Area_under_Curve,"\n")
+## This is how we get it
+T1 <- RF_data_test_B  %>%
+  group_by(Source_of_bias, BiassedAttrition) %>%
+  summarise(N = n(), .groups='drop_last') %>% # Totals by gender and Bias_Attrition
+  full_join(RF_data_test_B %>%
+              group_by(Source_of_bias) %>%
+              summarise(Total = n(), .groups='drop_last'), # Totals by gender only
+            by = 'Source_of_bias') %>% # Full join
+  ungroup() %>%
+  filter(BiassedAttrition == 'Yes') %>% # Lose the non-leavers
+  mutate(Proportion = N/Total) %>%
+  mutate(RR = Proportion/Proportion[[1]]) # Two steps to RR
+
+RRResult = as.numeric(T1$RR)
+names(RRResult) = paste0('RR_',T1$Source_of_bias)
+RR <- as.list(RRResult) 
 return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
             AUC_Train_Bias = Area_under_Curve_train_B, 
             AUC_Test_Attrition  = Area_under_Curve_test_A,
-            AUC_Test_Bias  = Area_under_Curve_test_B
+            AUC_Test_Bias  = Area_under_Curve_test_B,
+            RR
          ))
 }
 
 
-#OneBiassedModel(Data = Attrition,
-#         Source_of_bias = Gender,
-#         Level_of_bias = 0.0)
+OneBiassedModel(Data = Attrition,
+         Source_of_bias = Attrition$Gender,
+         Level_of_bias = 0.9)
 # AUC_Train_Attrition     AUC_Train_Noise  AUC_Test_Attrition       AUC_Test_Bias 
 # 0.9512131               0.9512131        0.8051510                0.8051510 
           
@@ -2104,11 +2151,11 @@ return(c(AUC_Train_Attrition = Area_under_Curve_train_A,
 
 ```
 
-```{r Run the biassed simulations  Gender (SLOW)}
-ModelBiassedSims_Gender <- seq(0,0.15, 0.05) %>%
+```{r Run the biassed simulations  Gender_TEST (SLOW)}
+ModelBiassedSims_Gender_TEST <- seq(0.0,0.15, 0.025) %>%
     set_names() %>%
-     map(~replicate(10, OneBiassedModel(Data = Attrition,
-                                         Source_of_bias = Gender,
+     map(~replicate(1000, OneBiassedModel(Data = Attrition,
+                                         Source_of_bias = Attrition$Gender,
                                           Level_of_bias = .x)
                     )
          )
@@ -2119,28 +2166,40 @@ ModelBiassedSims_Gender_TEST <- readr::read_rds(file = "data/ModelBiassedSims_Ge
 ```
 
 ```{r Post-process the biassed simulations Gender}
-D <- do.call(rbind, lapply(ModelBiassedSims_Gender_TEST, data.frame)) %>%
+DD <- do.call(rbind, lapply(ModelBiassedSims_Gender_TEST, data.frame)) %>%
   rownames_to_column('NAME') %>%
-  mutate(Error_rate = str_split(NAME,"\\.[AUC_]", simplify = TRUE )[,1]) %>%
-  mutate(Set = str_extract(NAME,"\\_(.*?)\\_")) %>%
-  mutate(Set = str_replace_all(Set, "\\_", "" )) %>%
-  mutate(Type = str_extract(NAME,"[^_]+$")) %>%
-  select(NAME,Error_rate,Set,Type,X1:X1000)
+  mutate(Error_rate = str_replace_all(NAME, "[:ALPHA:]", "")) %>%
+    mutate(Error_rate = str_replace_all(Error_rate, "_", "")) %>%
+      mutate(Error_rate = str_replace_all(Error_rate, "\\.$", "")) %>%
+        mutate(Error_rate = as.numeric(Error_rate)) %>%
+  mutate(Set = str_replace_all(NAME, "^[:DIGIT:]+|\\.+", "" )) %>%
+    mutate(Set = str_replace_all(Set, "^[:DIGIT:]+|\\.+", "" )) %>%
+      mutate(Category = str_extract(Set,"^[:ALPHA:]+")) %>%
+    mutate(Set = str_replace(Set, "^[:ALPHA:]+", "")) %>%
+      mutate(Set = str_replace(Set, "^_+", "")) %>%
+  mutate(Type = str_extract(Set,"[_].+$")) %>%
+    mutate(Type = str_replace(Type, "_", "")) %>%
+  mutate(Set = str_replace(Set,"[_].+$", "")) %>%
+  mutate(across(starts_with('X'),~as.numeric(.x))) %>% ## The X columns are named lists, not vectors
+  select(NAME,Category,Set,Type,Error_rate,X1:X1000)
 
-D <- D %>%
+
+D <- DD %>%
   pivot_longer(cols=starts_with('X'),
                names_prefix = 'X',
                names_transform = as.integer,
                names_to = 'Index',
-               values_to = 'AUC') %>%
+               values_to = 'Values') %>%
   mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
-  arrange(Set, Type, Error_rate, Index)
+#  mutate(Error_pct = paste0(Error_rate*100, '%')) %>%
+  arrange(Set, Type, Error_rate, Error_pct, Index) %>%
+  select(NAME,Category,Set,Type,Error_rate,Error_pct,Index,Values)
 ```
 
 ```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
-ggplot(data <- D,
-       aes(x = AUC, y = Error_pct, group = interaction(Set,Type,Error_rate),
+ggplot(data <- D %>% filter(Category == 'AUC'),
+       aes(x = Values, y = Error_pct, group = interaction(Set,Type,Error_rate),
            colour = Set, fill = Type)) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.8, position = 'dodge2') +
     labs(title = 'Impact of increasing level of bias related to Gender on training and test datasets',
@@ -2152,7 +2211,15 @@ ggplot(data <- D,
     coord_cartesian(xlim = c(0.64,1)) +
     scale_y_discrete(limits = rev)
 
-ggsave("Images/Bias_Gender.png")
-ggsave("Images/_Gender.pdf")
+ggplot(data <- D %>% filter(Category == 'RR'),
+       aes(y = Values, x = Error_pct, group = interaction(Set,Error_rate),
+           colour = Set, fill = Set)) + geom_point() +
+    labs(title = 'Impact of increasing level of bias related to Gender on test datasets',
+         x = "Level of simulated bias in training data",
+         y = "Effect of variable") +
+    theme_minimal()
+
+ggsave("Images/Bias_Gender_TEST.png")
+ggsave("Images/_Gender_TEST.pdf")
 ```
 
