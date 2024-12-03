@@ -921,13 +921,15 @@ For the test data, the overall prediction level is poor, but the gap between the
 
 Random error can also be described as noise. It is a source of variation in the data which is independent of the variables in the data. Bias is a source of systematic error. In our toy example, perhaps managers falsely believed that workers in a particular category were more likely to leave than others.
 
-In our substantive example, if registrars were more likely to refer people for investigation who had certain characteristics, but which were not in fact associated with sham marriage, this could give rise to systematic injustice and a range of harms.
+In the substantive example, if registrars were more likely to refer people for further investigation who had certain characteristics, but characteristics which were not, in fact, associated with sham marriage, this could give rise to systematic injustice and a range of harms.
 
-This is acknowledged by the Home Office AQA review which lists as one of the model assumption "Historical decisions (which determine target variable labels for model training) are accurate and free from bias." (AAQ page 3, Section 4). The variable used in the Home Office model have been redacted from their report, but by implication from the text, the opinion of the registrar as to the interaction between the couple, and the age difference between the couple are among those considered (EIA page 6 and 7).
+This is acknowledged by the Home Office AQA review which lists as one of the model assumption "Historical decisions (which determine target variable labels for model training) are accurate and free from bias." (AAQ page 3, Section 4). The variables used in the Home Office model have been redacted from their report, but by implication from the text, the opinion of the registrar as to the interaction between the couple, and the age difference between the couple are among those considered (EIA page 6 and 7).
+
+To explore the impact of bias two matters are considered. First, the effect of bias on the overall accuracy of predictions, and secondly the effect of bias on the size of the effect of the given variable. In each case a graph is the simplest method of presentation.
 
 ## Effect of bias due to a moderate importance variable EnvironmentSatisfaction  
 
-In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but is not a dominant predictor for Attrition.
+In order to model the impact of model bias, it is necessary to choose sources for the bias. For illustrative purposes only, the variable EnvironmentSatisfaction can be used. This has some significance, having an importance of around 7 in the models considered here, but it is not itself a dominant predictor for Attrition.
 
 To illustrate the impact of bias we shift the values of Attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section. The higher the level of EnvironmentSatisfaction, and the higher the scale of bias, the more likely it is that the Attrition will be (falsely) set to 'Yes'.
 
@@ -1458,9 +1460,9 @@ ggsave("Images/Bias_EnvironmentSatisfaction_RR.pdf")
 ```
 
 
-The overall pattern here is similar to that in the previous graph of the effects of random error. Compared to the training data both sets of test data have much worse performance. Notably the true data is better predicted than the biassed data.
+The overall pattern for prediction here is similar to that in the previous graph of the effects of random error. Compared to the training data both sets of test data have much worse performance. This emphasises the critical importance of using an adequate amount of data for testing purposes.
 
-However, the variability in estimates is not as high when bias is added to the data, as when random noise is added to the data. This is because the bias only goes one way, with certain people more likely to be misclassified as at risk of 'Attrition', when in fact they are not. Real bias can be far more complicated than that modelled here.
+However, the variability in estimates is not as high when bias is added to the data, as when random noise is added to the data. This is because the bias only goes one way, with certain people more likely to be misclassified as at risk of 'Attrition', when in fact they are not. It;s worth noting that real bias can be far more complicated than that modelled here.
 
 The impact of increasing bias is a little different on the training data, and the testing data. In both cases, the estimates increase in variability, however, for the training data, the AUC is slightly better for the 'true' Attrition prediction than for the biassed prediction. This is likely because the addition of bias based on of a variable which is part of the model reduces the correlation of that variable with others, and hence of trees containing that variable, and so improves fit. Again the true values for the test data are better predicted than the observed values.
 
@@ -1783,6 +1785,7 @@ ggsave("Images/Bias_Gender_AUC.png")
 ggsave("Images/_Gender_AUC.pdf")
 ```
 
+Again, the predictions on the training data are very misleading. The predictions on the test data are certainly usable, but become much less reliable as bias increases, even to very modest levels.
 
 ```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 ggplot(data <- D %>% filter(Category == 'RR'),
@@ -1799,6 +1802,7 @@ ggsave("Images/Bias_Gender_RR.png")
 ggsave("Images/_Gender_RR.pdf")
 ```
 
+In this graph Female is the reference group, and the impact of bias on classification in Males is considered. As bias rises the gap between Males and Females widens very substantially, to an increased risk of Attrition which is not supported by the data, and is driven by the added bias.
 
 ## Effect of bias in a higher importance variable DistanceFromHome
 
@@ -2038,26 +2042,23 @@ OneBiassedModel(Data = Attrition2,
 
 ```{r Run the biassed simulations  Distance (SLOW)}
 
-ModelBiassedSims_Distance <- seq(0.0,0.15, 0.025) %>%
-    set_names() %>%
-     map(~replicate(1000, OneBiassedModel(Data = Attrition2,
-                                         Source_of_bias = Attrition$Distance,
-                                          Level_of_bias = .x)
-                    )
-         )
+#ModelBiassedSims_Distance <- seq(0.0,0.15, 0.025) %>%
+#    set_names() %>%
+#     map(~replicate(1000, OneBiassedModel(Data = Attrition2,
+#                                         Source_of_bias = Attrition$Distance,
+#                                         Level_of_bias = .x)
+#                  )
+#         )
 
 #readr::write_rds(ModelBiassedSims_Distance, file = "data/ModelBiassedSims_Distance.Rds")
-#ModelBiassedSims_Distance <- readr::read_rds(file = "data/ModelBiassedSims_Distance.Rds")
+ModelBiassedSims_Distance <- readr::read_rds(file = "data/ModelBiassedSims_Distance.Rds")
 
 ```
 
 ```{r Post-process the biassed simulations Distance}
 DD <- do.call(rbind, lapply(ModelBiassedSims_Distance, data.frame)) %>%
   rownames_to_column('NAME') %>%
-  mutate(Error_rate = str_replace_all(NAME, "[:ALPHA:]", "")) %>%
-    mutate(Error_rate = str_replace_all(Error_rate, "_", "")) %>%
-      mutate(Error_rate = str_replace_all(Error_rate, "\\.$", "")) %>%
-        mutate(Error_rate = as.numeric(Error_rate)) %>%
+  mutate(Error_rate = as.numeric(str_extract(NAME, "^\\d+\\.?\\d*"))) %>%
   mutate(Set = str_replace_all(NAME, "^[:DIGIT:]+|\\.+", "" )) %>%
     mutate(Set = str_replace_all(Set, "^[:DIGIT:]+|\\.+", "" )) %>%
       mutate(Category = str_extract(Set,"^[:ALPHA:]+")) %>%
@@ -2076,7 +2077,7 @@ D <- DD %>%
                names_transform = as.integer,
                names_to = 'Index',
                values_to = 'Values') %>%
-  mutate(Error_pct = forcats::fct_inorder(paste(round(as.numeric(Error_rate)*100,0), '%'))) %>%
+  mutate(Error_pct = forcats::fct_inorder(paste(round(Error_rate * 100,0), '%'))) %>%
 #  mutate(Error_pct = paste0(Error_rate*100, '%')) %>%
   arrange(Set, Type, Error_rate, Error_pct, Index) %>%
   select(NAME,Category,Set,Type,Error_rate,Error_pct,Index,Values)
@@ -2102,23 +2103,40 @@ ggsave("Images/_DistanceFromHome_AUC.pdf")
 ```
 
 
+The pattern in this graph is similar to that in the previous graphs, with substantial reductions in the accuracy of classification, and a rise in the variability of classification, as bias rises, even to quite modest levels.
+
 ```{r Graph the biassed simulations DistanceFromHome, fig.cap= 'Simulation based estimates of the effect of increasing bias due to DistanceFromHome on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
-ggplot(data <- D %>% filter(Category == 'RR'),
+D_RR <- D %>%
+  filter(Category == 'RR') %>%
+  mutate(Set = forcats::fct_recode(Set,
+                                    '5 to 9' = '5to9',
+                                    '9 to 19' = '9to19',
+                                    'Over 19' = 'Over19',
+                                    'Under 5' = 'Under5')) %>%
+  mutate(Set = forcats::fct_relevel(Set,
+                                     'Under 5',
+                                     '5 to 9',
+                                     '9 to 19',
+                                     'Over 19'))
+
+
+ggplot(data <- D_RR,
        aes(y = Values, x = Error_pct, group = interaction(Set,Error_pct),
            colour = Set, fill = Set)) +
   geom_boxplot() +
-    labs(title = 'Impact of increasing level of bias related to DistanceFromHome on test datasets',
-         subtitle = 'Female is the reference group',
+    labs(title = 'Impact of increasing level of bias related to Distance on test datasets',
+         subtitle = 'Under 5 miles is the reference group',
          x = "Level of simulated bias in training data",
-         y = "Effect of Bias in DistanceFromHome effect in test data") +
+         y = "Effect of Bias in Distance effect in test data") +
     theme_minimal()
 
 ggsave("Images/Bias_DistanceFromHome_RR.png")
 ggsave("Images/_DistanceFromHome_RR.pdf")
 ```
 
+## Overall impacts of bias an noise
 
-For the test data, the prediction of the 'true' Attrition based on biassed data is substantially worse, while for the biassed test data, there is little difference in the median estimate. Indeed, the overall effect of using biassed data for training is close to undetectable in both of the biassed test data sets, suggesting that the Random forest fits the bias well.
+For the test data, the prediction of the 'true' Attrition based on biassed data is substantially worse, while for the biassed or noisy test data, there is little difference in the median estimate. Indeed, the overall effect of using biassed data for training is close to undetectable in all three of the biassed test data sets, suggesting that the Random forest fits the bias well. This is true in general of all machine learning techniques - their primary aim is to accurately reproduce their inputs. In the common situation where the 'truth' is not known, the errors induced by bias and noise cannot be identified.
 
 # Conclusions
 
