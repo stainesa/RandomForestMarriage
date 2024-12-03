@@ -933,6 +933,16 @@ In order to model the impact of model bias, it is necessary to choose sources fo
 
 To illustrate the impact of bias we shift the values of Attrition according to the value of EnvironmentSatisfaction. This shift is random, but is driven by a single value - the scale of bias, which serves a similar function in this modelling exercise, to the degree of noise in the previous section. The higher the level of EnvironmentSatisfaction, and the higher the scale of bias, the more likely it is that the Attrition will be (falsely) set to 'Yes'.
 
+```{r Table of EnvironmentSatisfaction and Attrition}
+kbl(table(Attrition$Attrition, Attrition$EnvironmentSatisfaction),  booktabs = T,
+    caption = "Attrition rate for the IBM data by EnvironmentSatisfaction.",
+    col.names = c('Left IBM?', 'Low', 'Medium', 'High', 'Very High')
+) %>% 
+  kable_styling(latex_options = c("repeat_header"))
+
+```    
+
+
 ```{r Scaling functions, results = 'hide'}
 
 Scale_to_median_IQR <- function(Variable) {
@@ -1417,7 +1427,7 @@ D <- DD %>%
   select(NAME,Category,Set,Type,Error_rate,Error_pct,Index,Values)
 ```
 
-```{r Graph the biassed simulations EnvironmentSatisfaction, fig.cap= 'Simulation based estimates of the effect of increasing bias due to EnvironmentSatisfaction on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations AUC EnvironmentSatisfaction, fig.cap= 'Simulation based estimates of the effect of increasing bias due to EnvironmentSatisfaction on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
 ggplot(data <- D %>% filter(Category == 'AUC'),
        aes(x = Values, y = Error_pct, group = interaction(Set,Type,Error_rate),
@@ -1437,26 +1447,34 @@ ggsave("Images/Bias_EnvironmentSatisfaction_AUC.pdf")
 ```
 
 
-```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+
+```{r Graph the biassed simulations RR EnvironmentSatisfaction, fig.cap= 'Simulation based estimates of the effect of increasing bias due to EnvironmentSatisfaction on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+
 D_RR <- D %>%
   filter(Category == 'RR') %>%
-  mutate(Set = forcats::fct_inorder(Set)) %>%
-  mutate(Set = forcats::fct_relevel(Set,"Low","Medium","High","Very")) %>%
-  mutate(Set = forcats::fct_recode(Set, Very_High = "Very"))
-
+  mutate(Set = forcats::fct_recode(Set,
+                                    'High' = 'High',
+                                    'Low' = 'Low',
+                                    'Medium' = 'Medium',
+                                    'Very high' = 'Very')) %>%
+  mutate(Set = forcats::fct_relevel(Set,
+                                     'Low',
+                                     'Medium',
+                                     'High',
+                                     'Very high'))
 
 ggplot(data <- D_RR,
        aes(y = Values, x = Error_pct, group = interaction(Set,Error_rate),
            colour = Set, fill = Set)) +
   geom_boxplot() +
     labs(title = 'Impact of increasing level of bias related to EnvironmentSatisfaction on test datasets',
-         subtitle = 'Female is the reference group',
+         subtitle = 'Low is the reference group',
          x = "Level of simulated bias in training data",
          y = "Effect of Bias in EnvironmentSatisfaction effect in test data") +
     theme_minimal()
 
 ggsave("Images/Bias_EnvironmentSatisfaction_RR.png")
-ggsave("Images/Bias_EnvironmentSatisfaction_RR.pdf")
+ggsave("Images/_EnvironmentSatisfaction_RR.pdf")
 ```
 
 
@@ -1766,7 +1784,7 @@ D <- DD %>%
   select(NAME,Category,Set,Type,Error_rate,Error_pct,Index,Values)
 ```
 
-```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations AUC Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
 ggplot(data <- D %>% filter(Category == 'AUC'),
        aes(x = Values, y = Error_pct, group = interaction(Set,Type,Error_rate),
@@ -1787,7 +1805,7 @@ ggsave("Images/_Gender_AUC.pdf")
 
 Again, the predictions on the training data are very misleading. The predictions on the test data are certainly usable, but become much less reliable as bias increases, even to very modest levels.
 
-```{r Graph the biassed simulations Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations RR Gender, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Gender on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 ggplot(data <- D %>% filter(Category == 'RR'),
        aes(y = Values, x = Error_pct, group = interaction(Set,Error_rate),
            colour = Set, fill = Set)) +
@@ -2083,7 +2101,7 @@ D <- DD %>%
   select(NAME,Category,Set,Type,Error_rate,Error_pct,Index,Values)
 ```
 
-```{r Graph the biassed simulations DistanceFromHome, fig.cap= 'Simulation based estimates of the effect of increasing bias due to DistanceFromHome on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations AUC Distance, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Distance on performance, as measured by Area Under the Curve, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 
 ggplot(data <- D %>% filter(Category == 'AUC'),
        aes(x = Values, y = Error_pct, group = interaction(Set,Type,Error_rate),
@@ -2105,7 +2123,7 @@ ggsave("Images/_DistanceFromHome_AUC.pdf")
 
 The pattern in this graph is similar to that in the previous graphs, with substantial reductions in the accuracy of classification, and a rise in the variability of classification, as bias rises, even to quite modest levels.
 
-```{r Graph the biassed simulations DistanceFromHome, fig.cap= 'Simulation based estimates of the effect of increasing bias due to DistanceFromHome on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
+```{r Graph the biassed simulations RR Distance, fig.cap= 'Simulation based estimates of the effect of increasing bias due to Distance on performance, as measured by estimates of relative risk, for Random Forest models of the IBM data set.', fig.dpi=1200, fig.height=8, fig.width=8}
 D_RR <- D %>%
   filter(Category == 'RR') %>%
   mutate(Set = forcats::fct_recode(Set,
